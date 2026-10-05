@@ -39,6 +39,8 @@ class Handoff:
     quote: dict | None = None
     log_path: str = ""
     model_reason: str | None = None  # what the model asked for, when code's reason overrode it
+    # After an extend write: idempotency key, approved vs charged total, confirmation number (for on-call).
+    extend: dict | None = None
     ts: str = field(default_factory=lambda: datetime.now(UTC).isoformat(timespec="seconds"))
 
 
@@ -88,6 +90,7 @@ def transfer(ctx: AgentContext, reason: ReasonCode, note: str, *, model_reason: 
         quote=ctx.quote,
         log_path=str(ctx.tracer.path),
         model_reason=model_reason,
+        extend=dict(ctx.last_write) if ctx.last_write else None,
     )
     ctx.transfer = packet
     ctx.pending_handoff = None
@@ -116,6 +119,9 @@ def customer_summary(packet: Handoff, fallback_lead: str = "") -> str:
         passed.append(f"what you need: {packet.note.rstrip('.')}")
     if packet.quote and packet.quote.get("total") is not None:
         passed.append(f"the quote (${packet.quote['total']:.2f})")
+    confirmation = (packet.extend or {}).get("confirmation_number")
+    if confirmation:
+        lines.append(f"Your confirmation number is {confirmation}.")
     lines.append("— Connecting you with a representative —")
     if passed:
         lines.append("I've passed on " + "; ".join(passed) + ". You won't need to repeat any of it.")

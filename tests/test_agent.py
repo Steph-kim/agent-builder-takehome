@@ -32,7 +32,9 @@ def test_no_threshold_value_reaches_the_model(name):
 
 def test_tools_and_settings():
     a = build_agent(dataclasses.replace(SETTINGS, reasoning_effort="low"))
-    assert [t.name for t in a.tools] == ["lookup_reservation", "search_kb", "handoff_to_human"]
+    # No tool can charge: the extend write is reachable only from the CLI after a "y" (extend.commit).
+    names = [t.name for t in a.tools]
+    assert names == ["lookup_reservation", "search_kb", "check_extension", "handoff_to_human"]
     assert a.model_settings.parallel_tool_calls is False
     assert a.model_settings.reasoning.effort == "low"
     assert build_agent(SETTINGS).model_settings.reasoning is None

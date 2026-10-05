@@ -13,11 +13,13 @@ import re
 import unicodedata
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from agents import RunContextWrapper, function_tool
 
+from . import extend
 from .client import AvisAPIError, AvisClient, AvisUnavailable
 from .config import Thresholds
 from .handoff import HANDOFF_LOG, Handoff, offer, request_transfer
@@ -47,7 +49,15 @@ class AgentContext:
     kb: KnowledgeBase | None = None  # built once at startup (one embedding call); search_kb needs it
     reservation: dict | None = None  # raw API record, set only after the last-name check passes
     failed_lookups: int = 0
-    quote: dict | None = None  # latest quote shown to the customer (Phase 3)
+    quote: dict | None = None  # latest quote {total, new_return, extension_days}; goes in the handoff packet
+    pending: extend.PendingExtension | None = None  # priced extension awaiting the customer's y/n on the card
+    write_state: str | None = None  # None | in_flight | committed | unknown — one extend write per session
+    last_write: dict | None = None  # key + approved vs actual, for the on-call packet
+    pilot_locations: frozenset[str] = frozenset()
+    now: Callable[[], datetime] = field(default=lambda: datetime.now(UTC))  # frozen in tests
+    notify: Callable[[str], None] = field(
+        default=lambda msg: None
+    )  # progress lines ("Checking availability…")
     gates_hit: list[str] = field(default_factory=list)
     # A code-raised reason offered to the customer; `handoff_to_human` files under it if they accept.
     pending_handoff: ReasonCode | None = None
@@ -93,7 +103,7 @@ def lookup(ctx: AgentContext, reservation_id: str, last_name: str) -> dict[str, 
     ctx.reservation = record
     if ctx.pending_handoff in _TRANSIENT:  # the outage passed; don't file a stale reason later
         ctx.pending_handoff = None
-    return reservation_view(record)
+    return reservation_view(record, ctx.now())
 
 
 def normalize_reservation_id(raw: str) -> str:
@@ -143,10 +153,10 @@ def _words(name: str) -> list[str]:
     return re.sub(r"[^\w']", " ", folded).split()
 
 
-def reservation_view(record: dict) -> dict[str, Any]:
+def reservation_view(record: dict, now: datetime) -> dict[str, Any]:
     """What the model may see once verified: dates (local, with weekday), locations, vehicle class and
-    its generic description, rate. Never the name, address, plate, exact make/model, color,
-    customer id or card."""
+    its generic description, rate, and the current time at the return location (for "Friday", "tomorrow").
+    Never the name, address, plate, exact make/model, color, customer id or card."""
     pickup, ret = record["pickup_location"], record["return_location"]
     dates = record["dates"]
     return {
@@ -162,6 +172,7 @@ def reservation_view(record: dict) -> dict[str, Any]:
         "current_return_datetime": _local(dates["current_return_datetime"], ret["code"], dates),
         "daily_rate": record["pricing"]["daily_rate"],
         "currency": record["pricing"]["currency"],
+        "now_at_return_location": _local(now.isoformat(), ret["code"], dates),
     }
 
 
@@ -235,6 +246,17 @@ async def search_kb(wrapper: RunContextWrapper[AgentContext], query: str) -> dic
     ctx = wrapper.context
     args = {"query": scrub(query).text}
     return await traced_async(ctx, "search_kb", args, lambda: search(ctx, query))
+
+
+@function_tool
+def check_extension(wrapper: RunContextWrapper[AgentContext], new_return_local: str) -> dict:
+    """Check and price an extension for the verified reservation. Call only after the customer has confirmed
+    the new return date and time. new_return_local: local wall-clock time at the return location, formatted
+    YYYY-MM-DDTHH:MM. If it's ready, the system shows the customer a confirmation card to approve; otherwise
+    relay the message."""
+    ctx = wrapper.context
+    args = {"new_return_local": new_return_local}
+    return traced(ctx, "check_extension", args, lambda: extend.check(ctx, new_return_local))
 
 
 @function_tool

@@ -15,7 +15,7 @@ from openai.types.shared import Reasoning
 from .config import Settings
 from .handoff import offer, transfer
 from .reasons import ReasonCode
-from .tools import AgentContext, handoff_to_human, lookup_reservation, search_kb
+from .tools import AgentContext, check_extension, handoff_to_human, lookup_reservation, search_kb
 
 # Model calls per customer message. A normal turn needs at most ~3 (lookup, search, reply); hitting this
 # means the model is looping, which becomes an internal_error offer rather than a crash.
@@ -51,9 +51,16 @@ about the customer.
 - One reservation per chat. If they ask about another, relay the tool's message.
 
 # Extensions
-- Pin down the new return as a local date AND time at the return location, read back with the weekday \
-("Friday, June 18 at 2:00 PM — is that right?").
-- Never state a price, fee, or time for this rental unless it came from a tool in this chat.
+- Pin down the new return as a local date AND time at the return location. Resolve "Friday" or "tomorrow" \
+against now_at_return_location from the lookup. Read it back with the weekday ("Friday, June 18 at 2:00 PM \
+— is that right?").
+- Only after they confirm, call check_extension with that local time (YYYY-MM-DDTHH:MM).
+- If it's ready, the system shows them a confirmation card with the price; they approve it there and enter \
+their payment details privately. Say one short line pointing them to the card. You never collect payment \
+details and never say the change is made or updated — the system confirms it.
+- If they want a different time, confirm it and call check_extension again.
+- After the system confirms, you can answer questions about the confirmed change.
+- Never state a price, fee, or time for this rental unless it came from a tool in this chat or the system.
 
 # Policy questions
 - Call search_kb and answer only from its results. Cite the article id(s) in brackets, e.g. [kb_ext_01].
@@ -93,7 +100,7 @@ def build_agent(settings: Settings) -> Agent[AgentContext]:
     return Agent[AgentContext](
         name="Avis agent",
         instructions=INSTRUCTIONS,
-        tools=[lookup_reservation, search_kb, handoff_to_human],
+        tools=[lookup_reservation, search_kb, check_extension, handoff_to_human],
         model=settings.model,
         model_settings=ModelSettings(parallel_tool_calls=False, reasoning=reasoning),
     )

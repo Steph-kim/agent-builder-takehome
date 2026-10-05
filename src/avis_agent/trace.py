@@ -33,7 +33,7 @@ EVENT_FIELDS: dict[str, frozenset[str]] = {
     "api.request": frozenset(
         {"method", "path", "status", "error_code", "latency_ms", "attempt", "idempotency_key"}
     ),
-    "gate.decision": frozenset({"gate", "allowed", "reason_code"}),
+    "gate.decision": frozenset({"gate", "allowed", "reason_code", "stage"}),
     "approval": frozenset({"shown_total", "decision"}),
     "outcome": frozenset({"outcomes"}),
 }
@@ -52,6 +52,7 @@ PAYLOAD_KEYS = frozenset(
         "new_return_datetime", "quote", "charges", "extension_days", "subtotal", "late_fee",
         "one_way_fee", "taxes_and_fees", "total_charged", "success", "confirmation_number",
         "extension_details", "late_return", "change_type", "idempotency_key",
+        "new_return_local", "ready", "new_return", "now_at_return_location", "total",
         # kb
         "query", "results", "id", "title", "authority", "last_updated", "note",
         # handoff / errors

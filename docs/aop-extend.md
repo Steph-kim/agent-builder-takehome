@@ -1,8 +1,9 @@
 # AOP — Extend an active rental
 
 Agent Operating Procedure for the Avis servicing pilot (US / English / USD). This is the source the system
-prompt mirrors section by section. **The gates named here are enforced in code (`policy.py`, the commit tool,
-the CLI) — the prompt only guides.** A test asserts the reason codes below equal the `ReasonCode` enum.
+prompt mirrors section by section. **The gates named here are enforced in code (`policy.py`, `extend.py`,
+the CLI) — the prompt only guides. The agent can check and price an extension; only the terminal, after the
+customer's "y", can make the charge.** A test asserts the reason codes below equal the `ReasonCode` enum.
 
 ## 1. Trigger intents
 | Customer says | Do |
@@ -26,25 +27,29 @@ Open with "How can I help?" — ask for nothing until the request needs it.
 
 ## 3. Clarify the new return time
 - Pin down a local date **and** time at the return location ("Friday" → "Friday Jun 18 at 2:00 PM — is that
-  right?"). Relative dates resolve against "now" in the location's time zone.
-- A return at or before the current one is not an extension → `not_an_extension`.
+  right?"). Relative dates resolve against "now" in the location's time zone (the lookup returns it).
+- Check only after the customer confirms the read-back.
+- A return at or before the current one is not an extension → `not_an_extension`. A time that has already
+  passed is sent back to the agent to ask again.
 - If the customer only says "a few more hours", say the quote will show the price and that a partial day may
   bill as a full day — the quote decides, not the agent.
 
 ## 4. Check (`check_extension`)
-Code runs, in order: status → market → overdue → new time is later → availability → quote → value. The first gate that fails
-returns its reason code; the agent hands off with that code. The agent never sees the threshold values
-(they live in `config.Thresholds`), so it cannot coach a customer under a limit.
+Code runs, in order: lock (an extension already made or unconfirmed, or a failed email/payment earlier in the
+chat) → status → market → overdue → new time is later → availability ("Checking availability…") → quote →
+value. The first gate that fails returns its reason code and the customer copy; the agent relays the **offer**
+(§7) and keeps helping with anything else. The agent never sees the threshold values (they live in
+`config.Thresholds`), so it cannot coach a customer under a limit. A new check always replaces an earlier card.
 
 ## 5. Confirm (card → y/n → payment off-model)
 1. The terminal prints a **card rendered by code from the stored quote**: weekday + local dates, line items,
    total, card brand + last-4. The model does not write any price.
-2. The customer types **y** or **n**. Anything else counts as *no*, and the agent gets their text as the next
-   message.
-3. On **y**: the terminal asks for email, CVV and ZIP (hidden input). These never reach the model or the logs
-   and are cleared after the call.
+2. The customer types **y** or **n**. Anything else counts as *no*: the terminal says nothing has been changed,
+   and if it was more than "n", their (scrubbed) text goes to the agent as the next message.
+3. On **y**: the terminal asks for email, then CVV and ZIP (hidden input). These never reach the model, the
+   history or the logs, and are dropped after the call. If Avis rejects them, the terminal asks once more.
 4. Just before the write, code re-runs every gate and re-quotes. If the total changed, it shows a new card
-   instead of charging.
+   instead of charging — once; a second change in a row is offered to a representative (`internal_error`).
 5. A rejected card leaves the conversation open. The customer can pick another date (new quote, new card).
 
 ## 6. Commit and receipt (`commit_extension`)
@@ -54,7 +59,11 @@ returns its reason code; the agent hands off with that code. The agent never see
   and charged** and a representative will reconcile it. Never say "failed".
 - Retries exhausted with no answer → hand off `outcome_unknown`. Tell the customer the change **may** have gone
   through and a representative will confirm it.
-- Email rejected twice → `verification_failed`. Payment declined → `payment_declined`.
+- Email/CVV/ZIP rejected twice → `verification_failed`; payment declined → `payment_declined`. Either one
+  locks extensions for the rest of the chat (no guessing through new cards).
+- Fail-closed: once the request may have reached Avis, anything other than a clear first-attempt refusal
+  (crash, Ctrl-C, unreadable reply, a refusal after a timed-out attempt) is `outcome_unknown`. The idempotency
+  key is logged before the request is sent; the handoff packet carries it with the approved and charged totals.
 
 ## 7. Hand off (`handoff_to_human`)
 A handoff is a **warm transfer, never a dead end**. Two steps, kept apart:

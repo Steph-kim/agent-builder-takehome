@@ -4,7 +4,10 @@ Reads retry 5xx/timeouts with jittered backoff; 4xx is never retried. The extend
 write mints one Idempotency-Key per call (one exact body) and reuses it only for
 transport retries of that body, because the API replays a cached success for a
 reused key *regardless of body*. Write retries exhausted → OutcomeUnknown: the
-charge may or may not have happened, and callers must never say "failed".
+charge may or may not have happened, and callers must never say "failed". A write
+is fail-closed: a 4xx counts as definite only on the first attempt (after a timeout
+or 5xx the first attempt may still have been applied), and a 2xx we can't parse is
+OutcomeUnknown too.
 """
 
 from __future__ import annotations
@@ -130,7 +133,7 @@ class AvisClient:
         key = idempotency_key or str(uuid.uuid4())
         path = f"/reservations/{_path_id(reservation_id)}/extend"
         try:
-            return self._request("POST", path, WRITE_POLICY, json=body, idempotency_key=key)
+            return self._request("POST", path, WRITE_POLICY, json=body, idempotency_key=key, write=True)
         except _RetriesExhausted as e:
             raise OutcomeUnknown(path, key, e.last_error) from None
 
@@ -151,6 +154,7 @@ class AvisClient:
         params: dict | None = None,
         json: dict | None = None,
         idempotency_key: str | None = None,
+        write: bool = False,
     ) -> dict:
         headers = {"Idempotency-Key": idempotency_key} if idempotency_key else {}
         last_error = ""
@@ -180,6 +184,10 @@ class AvisClient:
             if resp.is_success and isinstance(payload, dict):
                 self._emit(event, started, status=resp.status_code, error_code=None)
                 return payload
+            if write and (resp.is_success or attempt > 1):
+                # A body we can't read, or a refusal after an attempt that may have been applied.
+                self._emit(event, started, status=resp.status_code, error_code=_error_code(payload))
+                raise _Uncertain(f"HTTP {resp.status_code} on attempt {attempt}")
             err = (payload or {}).get("error") if isinstance(payload, dict) else None
             err = err if isinstance(err, dict) else {}
             code = err.get("code") or f"HTTP_{resp.status_code}"
@@ -204,6 +212,10 @@ class AvisClient:
 class _RetriesExhausted(Exception):
     def __init__(self, last_error: str):
         self.last_error = last_error
+
+
+class _Uncertain(_RetriesExhausted):
+    """A write answer that doesn't prove nothing was charged."""
 
 
 def _path_id(value: str) -> str:
