@@ -1,0 +1,40 @@
+{
+  "reservation_id": "AVS-77001020",
+  "customer_id": "CUST-738294",
+  "customer_name": "Priya Patel",
+  "membership_status": "avis_preferred",
+  "vehicle": {
+    "type": "suv",
+    "description": "Toyota RAV4 or similar",
+    "make_model": "2025 Toyota RAV4",
+    "color": "Gray",
+    "license_plate": "7SUV909"
+  },
+  "pickup_location": {
+    "code": "SFO",
+    "name": "San Francisco International Airport",
+    "address": "780 S Airport Blvd, San Francisco, CA 94128"
+  },
+  "return_location": {
+    "code": "SFO",
+    "name": "San Francisco International Airport",
+    "address": "780 S Airport Blvd, San Francisco, CA 94128"
+  },
+  "dates": {
+    "pickup_datetime": "2026-06-27T08:00:00-07:00",
+    "current_return_datetime": "2026-10-05T09:50:34+00:00",
+    "original_return_datetime": "2026-06-29T17:00:00-07:00"
+  },
+  "pricing": {
+    "daily_rate": 54.99,
+    "currency": "USD"
+  },
+  "payment": {
+    "card_on_file": {
+      "type": "Mastercard",
+      "last_four": "2941"
+    },
+    "total_charged": 164.97
+  },
+  "status": "active"
+}

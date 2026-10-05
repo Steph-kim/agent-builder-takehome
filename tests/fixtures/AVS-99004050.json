@@ -1,0 +1,40 @@
+{
+  "reservation_id": "AVS-99004050",
+  "customer_id": "CUST-624815",
+  "customer_name": "Tom\u00e1s Rivera",
+  "membership_status": "standard",
+  "vehicle": {
+    "type": "suv",
+    "description": "Ford Escape or similar",
+    "make_model": "2024 Ford Escape",
+    "color": "Silver",
+    "license_plate": "9OAK505"
+  },
+  "pickup_location": {
+    "code": "OAK",
+    "name": "Oakland International Airport",
+    "address": "1 Airport Dr, Oakland, CA 94621"
+  },
+  "return_location": {
+    "code": "OAK",
+    "name": "Oakland International Airport",
+    "address": "1 Airport Dr, Oakland, CA 94621"
+  },
+  "dates": {
+    "pickup_datetime": "2027-06-10T12:00:00-07:00",
+    "current_return_datetime": "2027-06-13T12:00:00-07:00",
+    "original_return_datetime": "2027-06-13T12:00:00-07:00"
+  },
+  "pricing": {
+    "daily_rate": 53.99,
+    "currency": "USD"
+  },
+  "payment": {
+    "card_on_file": {
+      "type": "Mastercard",
+      "last_four": "5590"
+    },
+    "total_charged": 161.97
+  },
+  "status": "active"
+}
