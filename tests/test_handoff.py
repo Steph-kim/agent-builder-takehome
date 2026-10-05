@@ -69,7 +69,7 @@ def test_model_reason_used_when_nothing_pending(ctx):
 def test_offer_does_not_transfer_and_rejects_transfer_now_reasons(ctx):
     out = offer(ctx, ReasonCode.HIGH_VALUE)
     assert out["message"] == CUSTOMER_COPY[ReasonCode.HIGH_VALUE]
-    assert ctx.transfer is None and ctx.tracer.outcomes == []
+    assert ctx.transfer is None and ctx.tracer.outcomes == ["offered:high_value"]
     with pytest.raises(ValueError):
         offer(ctx, ReasonCode.OUTCOME_UNKNOWN)  # must transfer, never wait on the customer
 
@@ -140,7 +140,21 @@ def test_transient_offer_cleared_once_lookup_succeeds(ctx):
 
     ctx.client = Up()
     assert lookup(ctx, "AVS-29471835", "Johnson")["verified"] is True
-    assert ctx.pending_handoff is None
+    assert ctx.pending_handoff is None and ctx.tracer.outcomes == []
+
+
+def test_declined_offer_closes_as_offered_not_abandoned(ctx):
+    offer(ctx, ReasonCode.OVERDUE_BEYOND_POLICY)
+    offer(ctx, ReasonCode.OVERDUE_BEYOND_POLICY)  # re-offered on a later turn: still one request
+    ctx.tracer.close()
+    assert ctx.tracer.outcomes == ["offered:overdue_beyond_policy"]
+
+
+def test_accepting_after_other_turns_replaces_the_offer(ctx):
+    offer(ctx, ReasonCode.OVERDUE_BEYOND_POLICY)
+    ctx.tracer.add_outcome("info_only")
+    request_transfer(ctx, "customer_requested", "")
+    assert ctx.tracer.outcomes == ["info_only", "handed_off:overdue_beyond_policy"]
 
 
 def test_unwritable_handoff_log_still_transfers(ctx, tmp_path):

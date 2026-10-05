@@ -120,8 +120,14 @@ class Tracer:
     # --- outcomes (one per customer request; the billing ledger) ---------------------------
 
     def add_outcome(self, kind: str, reason: str | None = None) -> None:
-        """kind: resolved_extension | info_only | handed_off (with reason) | error."""
-        self.outcomes.append(f"handed_off:{reason}" if kind == "handed_off" else kind)
+        """kind: resolved_extension | info_only | handed_off / offered (with reason) | error."""
+        self.outcomes.append(f"{kind}:{reason}" if kind in ("handed_off", "offered") else kind)
+
+    def withdraw_offer(self, reason: str) -> None:
+        """An offered handoff was taken up or went stale: drop its `offered:` outcome."""
+        tag = f"offered:{reason}"
+        if tag in self.outcomes:
+            del self.outcomes[len(self.outcomes) - 1 - self.outcomes[::-1].index(tag)]
 
     def close(self, *, interrupted: bool = False) -> None:
         """Write the outcome line. Call from a `finally` so Ctrl-C still leaves a ledger entry."""

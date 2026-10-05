@@ -49,6 +49,9 @@ def offer(ctx: AgentContext, reason: ReasonCode) -> dict[str, Any]:
     if reason not in OFFERED:
         raise ValueError(f"{reason} is not an offered reason")
     ctx.pending_handoff = reason
+    # D11: a gate stop the customer declines is still a protective handoff, not `abandoned`.
+    if f"offered:{reason.value}" not in ctx.tracer.outcomes:
+        ctx.tracer.add_outcome("offered", reason.value)
     if reason.value not in ctx.gates_hit:
         ctx.gates_hit.append(reason.value)
     return {"reason_code": reason.value, "message": CUSTOMER_COPY[reason]}
@@ -93,6 +96,8 @@ def transfer(ctx: AgentContext, reason: ReasonCode, note: str, *, model_reason: 
         extend=dict(ctx.last_write) if ctx.last_write else None,
     )
     ctx.transfer = packet
+    if ctx.pending_handoff is not None:
+        ctx.tracer.withdraw_offer(ctx.pending_handoff.value)
     ctx.pending_handoff = None
     _append(ctx.handoff_log, asdict(packet), ctx)
     ctx.tracer.add_outcome("handed_off", reason.value)

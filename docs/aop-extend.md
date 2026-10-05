@@ -126,6 +126,7 @@ Code records **one outcome per customer request**, in order. The model never cla
 |---|---|
 | `resolved_extension` | Extend committed and confirmed, response matches the approved card |
 | `handed_off:<reason>` | Ended in a handoff with that reason code |
+| `offered:<reason>` | A gate stopped the change and offered a human; the customer declined (protective, not abandoned) |
 | `info_only` | Answered a policy question, no change requested |
 | `abandoned` | Customer left before finishing |
 | `interrupted` | Session killed mid-request (Ctrl-C); idempotency key logged if mid-commit |
@@ -142,7 +143,7 @@ can trust the invoice, and every billed line is traceable to the session log.
 | Extends, then "wrong date, get me a person" | 0 | Later handoff about the same change |
 | Extend retries exhausted (`outcome_unknown`) | 0 | Can't prove it happened |
 | Response ≠ card (`confirmation_mismatch`) | 0 | Needs a human to reconcile |
-| Marcus, overdue 103 days, stopped by gates | 0 | Protective handoff — counted, not billed |
+| Marcus, overdue 103 days, stopped by gates | 0 | Protective handoff — counted, not billed (`offered:` if he declines the transfer) |
 | Customer rejects every card and leaves | 0 | `abandoned` |
 | Policy question only | 0 | `info_only` |
 

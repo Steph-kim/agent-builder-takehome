@@ -102,6 +102,7 @@ def lookup(ctx: AgentContext, reservation_id: str, last_name: str) -> dict[str, 
         return _failed(ctx)
     ctx.reservation = record
     if ctx.pending_handoff in _TRANSIENT:  # the outage passed; don't file a stale reason later
+        ctx.tracer.withdraw_offer(ctx.pending_handoff.value)
         ctx.pending_handoff = None
     return reservation_view(record, ctx.now())
 
