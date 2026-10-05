@@ -1,13 +1,15 @@
-# Agent framework — we highly recommend the OpenAI Agents SDK (the starter scaffold uses it):
-openai-agents>=0.1.0
-openai>=1.40
-# Prefer Google's Agent Development Kit (ADK)? Use it instead of the two lines above:
-#   google-adk>=0.1.0
+# Pinned (Python 3.12). openai-agents must be new enough for tool needs_approval / RunState.
+openai-agents==0.23.1
+openai==3.24.0
 
-python-dotenv>=1.0
-requests>=2.31
+python-dotenv==1.2.4
+requests==2.34.2
+httpx==0.28.1
 
-# For RAG, add a vector store / embeddings library of your choosing, e.g.:
-#   chromadb        (simple local vector DB)
-#   faiss-cpu       (in-memory similarity search)
-#   numpy           (roll your own cosine similarity)
+# RAG: roll-our-own cosine similarity over OpenAI embeddings
+numpy==2.5.3
+PyYAML==6.0.3
+
+# Dev
+pytest==9.1.1
+ruff==0.16.10
