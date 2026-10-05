@@ -1,4 +1,4 @@
-"""Scrub payment data and emails from customer text before it reaches the model or a log.
+"""Scrub payment data, emails and phone numbers from customer text before it reaches the model or a log.
 
 The agent never needs a card number, CVV, ZIP or email in chat — the CLI collects
 those off-model after the customer approves a charge. Anything volunteered is replaced
@@ -20,6 +20,11 @@ _SECRET_AFTER_KEYWORD = re.compile(
     re.IGNORECASE,
 )
 _EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
+# US numbers (pilot market): (310) 555-0142, 310-555-0142, 310.555.0142, +1 310 555 0142, 3105550142.
+# Area code and exchange can't start with 0/1, which keeps dates and most ids out.
+_PHONE = re.compile(
+    r"(?<![\w-])(?:\+?1[ .-]?)?(?:\([2-9]\d\d\)|[2-9]\d\d)[ .-]?[2-9]\d\d[ .-]?\d{4}(?![\w-])"
+)
 
 REDACTED = "[redacted]"
 
@@ -53,9 +58,14 @@ def scrub(text: str) -> ScrubResult:
         kinds.append("email")
         return REDACTED
 
+    def phone(m: re.Match) -> str:
+        kinds.append("phone")
+        return REDACTED
+
     text = _CARD.sub(card, text)
     text = _SECRET_AFTER_KEYWORD.sub(secret, text)
     text = _EMAIL.sub(email, text)
+    text = _PHONE.sub(phone, text)
     return ScrubResult(text, kinds)
 
 

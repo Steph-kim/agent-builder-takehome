@@ -12,3 +12,6 @@ venv/
 .DS_Store
 .idea/
 .vscode/
+
+# Session traces (may contain scrubbed customer text)
+logs/

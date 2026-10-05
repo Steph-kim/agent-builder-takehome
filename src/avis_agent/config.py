@@ -27,7 +27,7 @@ class Thresholds:
     overdue_hours: float = 24.0
     max_total_usd: float = 500.0
     max_added_days: int = 14
-    max_failed_lookups: int = 3
+    max_failed_lookups: int = 5
 
 
 @dataclass(frozen=True)
