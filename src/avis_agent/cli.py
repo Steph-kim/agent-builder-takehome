@@ -34,6 +34,12 @@ GREETING = "How can I help?"
 EXIT_WORDS = frozenset({"exit", "quit"})
 YES = frozenset({"y", "yes"})
 NO = frozenset({"", "n", "no"})
+# Model-only, after a card closes without a charge. The model's history still holds check_extension's
+# "ready", so without this it points the customer to a card that's gone (seen in sims, 2026-10-06).
+CARD_CLOSED = (
+    "The card was closed without a charge; no card is showing now. If the customer still wants that "
+    "change, call check_extension again — never point them to a card."
+)
 PAYMENT_INTRO = (
     "To confirm, enter the email on the booking, then the card's security code and billing ZIP. "
     "They go straight to Avis — the assistant never sees them."
@@ -105,6 +111,7 @@ def _confirm_pending(
     t = ctx.tracer
     while (pending := ctx.pending) is not None and not pending.shown and ctx.transfer is None:
         pending.shown = True
+        history[:] = [h for h in history if h.get("content") != CARD_CLOSED]  # a card is showing again
         write(render_card(pending))  # not _say: the card's last four stays out of agent.msg
         try:
             raw = read("Approve this charge? (y/n): ").strip()
@@ -115,7 +122,7 @@ def _confirm_pending(
         t.emit("approval", shown_total=float(pending.total), decision=decision)
         if decision != "y":
             ctx.pending = None
-            _note(history, write, t, NOTHING_CHANGED)
+            _closed(history, write, t)
             return raw if decision == "other" else None
 
         pending.approved = True
@@ -124,7 +131,7 @@ def _confirm_pending(
             payment = _collect_payment(read, read_secret, write)
             if payment is None:
                 ctx.pending = None
-                _note(history, write, t, NOTHING_CHANGED)
+                _closed(history, write, t)
                 return None
             result = commit(ctx, pending, payment, retry_allowed=retry_allowed)
             del payment
@@ -165,6 +172,11 @@ def _note(history: list, write: Callable[[str], None], t: Tracer, text: str) -> 
     """A code-written agent line: shown, logged, and added to history so the model knows."""
     _say(write, t, text)
     history.append({"role": "assistant", "content": text})
+
+
+def _closed(history: list, write: Callable[[str], None], t: Tracer) -> None:
+    _note(history, write, t, NOTHING_CHANGED)
+    history.append({"role": "system", "content": CARD_CLOSED})
 
 
 def _say(write: Callable[[str], None], t: Tracer, text: str) -> None:

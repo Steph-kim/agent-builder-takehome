@@ -12,6 +12,7 @@ import pytest
 
 from avis_agent import agent as agent_mod
 from avis_agent import cli
+from avis_agent.cli import CARD_CLOSED
 from avis_agent.config import Settings
 from avis_agent.extend import NOTHING_CHANGED, CommitResult, PendingExtension, render_receipt
 from avis_agent.handoff import request_transfer, transfer
@@ -208,6 +209,45 @@ def test_no_prints_one_code_line_and_waits(tmp_path, monkeypatch):
     )
     assert out[-1] == f"Agent: {NOTHING_CHANGED}" and not calls
     assert len(histories) == 1  # the model wasn't run again for the "n"
+
+
+def test_a_declined_card_tells_the_model_it_is_gone(tmp_path, monkeypatch):
+    """Without the note the model saw check_extension's old "ready" and pointed to a phantom card."""
+    stub_commit(monkeypatch)
+    histories = []
+    run_chat(
+        tmp_path,
+        monkeypatch,
+        ["extend to Thursday", "n", "go ahead with it after all"],
+        model_offering_card,
+        histories=histories,
+    )
+    after = histories[-1]
+    note = after.index({"role": "system", "content": CARD_CLOSED})
+    assert after[note - 1]["content"] == NOTHING_CHANGED and after[note + 1]["role"] == "user"
+
+
+@pytest.mark.parametrize("decisions", [["n"], ["n", "n"], ["y"], ["n", "y"], ["n", "n", "y"]])
+def test_card_closed_note_iff_the_last_card_closed_uncharged(tmp_path, monkeypatch, decisions):
+    """Invariant at the next model call: one CARD_CLOSED note if the last card was declined, none otherwise.
+    kills: the note left beside a later receipt (seen live: the model then denied a real charge);
+    kills: notes piling up across declines; kills: the note never added."""
+    receipt = render_receipt(RESPONSE, pending())
+    stub_commit(monkeypatch, *[CommitResult("resolved", receipt) for d in decisions if d == "y"])
+    lines = []
+    for d in decisions:
+        lines += ["extend to Thursday", d] + (["a@b.co"] if d == "y" else [])
+    histories = []
+    run_chat(
+        tmp_path,
+        monkeypatch,
+        [*lines, "thanks"],
+        model_offering_card,
+        secrets=["8641", "97035"] * decisions.count("y"),
+        histories=histories,
+    )
+    notes = sum(h.get("content") == CARD_CLOSED for h in histories[-1])
+    assert notes == (1 if decisions[-1] == "n" else 0)
 
 
 def test_other_text_at_the_card_is_a_no_scrubbed_and_answered_once(tmp_path, monkeypatch):
