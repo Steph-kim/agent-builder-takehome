@@ -13,6 +13,9 @@ Built on the OpenAI Agents SDK with `gpt-5-mini`. The rule throughout: **the mod
 model talks and picks tools. Deterministic code owns every eligibility gate, time-zone math, every price the
 customer sees, idempotency, the charge and the receipt. The model has no tool that can move money.
 
+A **gate** is one of those code checks: a rule (too overdue, too expensive, no availability…) that stops an
+extension and offers a person instead.
+
 ---
 
 ## Run it
@@ -39,7 +42,7 @@ python -m avis_agent         # start a chat; type `exit` to leave
 | Say | What you should see |
 |---|---|
 | "I need to keep my car until Friday afternoon" → `AVS-29471835`, Johnson | Date read-back → code-rendered card → `y` → email/CVV/ZIP (hidden, never seen by the model) → receipt from the API response |
-| "Can I extend? AVS-48372915, Lee" | Stopped: 100+ days overdue, and the quote is over $4,000, which the API would happily charge. A representative is offered |
+| "Can I extend? AVS-48372915, Lee" | Marcus Lee is stopped by the gates: 100+ days overdue, and the quote is over $4,000, which the API would happily charge. A representative is offered |
 | "Extend AVS-99004050 (Rivera) by a day" | "Checking availability…" → `/availability` times out → a representative is offered; nothing is guessed |
 | "What's the grace period?" | 30 minutes, from the official article, **not** the legacy "2 hours" |
 | "Cancel my booking" | Asks for the reservation once, then hands off as `unsupported_intent` |
@@ -51,7 +54,7 @@ worked throughout testing). The mock API doesn't persist writes, so the same ren
 pytest -q                                   # offline unit suite (252 tests), no network
 python -m evals.retrieval                   # KB retrieval: recall, authority precedence, off-topic rejection
 python -m evals.sim -k 3                    # live scenario sims (~30 min); exits 1 on any safety failure
-python -m evals.sim kb_gap messy_robert -v  # a subset, with transcripts
+python -m evals.sim kb_gap messy_robert -v  # named scenarios only, with transcripts
 python -m evals.compare <stamp> <stamp>...  # model comparison table from finished runs
 ```
 
@@ -71,7 +74,8 @@ KB, and only the cancel itself is handed off.
 
 **Handoff is a product feature, not a failure.** The alternatives are attempting everything (Marcus gets charged
 $4,000+) or dead-ending with "please call us".
-- Code assembles the packet: reservation, intent, gates hit, the quote, idempotency key and log path.
+- Code assembles the packet: reservation, intent, gates hit, the quote, idempotency key (the id that stops a
+  charge being sent twice) and log path.
 - A handoff ends the chat, so a bot and a human never act on one reservation at once.
 - Gate stops are *offered*, not forced. The customer can decline and keep asking questions.
 - The reason codes double as a roadmap: a week of `unsupported_intent` counts tells Avis what to automate next.
@@ -98,7 +102,9 @@ Avis can audit.
 ## Customer experience
 
 A real terminal session, captured from a live run (`gpt-5-mini`; the customer is the simulated one from the evals).
-Long lines are wrapped and the wording is unedited. Hidden prompts show nothing as you type, as in a real terminal. The session log is in [`docs/sample-logs/`](docs/sample-logs/).
+Long lines are wrapped and the wording is unedited, warts included: "exempt from the late-fee benefit" should read
+"exempt from the late fee", and the agent mentions the card a moment before code prints it. Hidden prompts show
+nothing as you type, as in a real terminal. The session log is in [`docs/sample-logs/`](docs/sample-logs/).
 
 ```text
 Agent: How can I help?
@@ -433,7 +439,7 @@ and an invariant over sequences of approve/decline decisions (what the model is 
 
 ## What I cut
 
-Against the ~5 h budget, in the order I'd cut them:
+Against the ~5 h budget, first cut first:
 1. **Modify / Cancel / Upgrade writes.** See Scope. Each is a handoff with its own reason code.
 2. **A larger model study:** k ≥ 10 to separate `gpt-5-mini` from `gpt-5.5`, and a reasoning-effort sweep.
 3. **A live idempotency test.** Covered by the MockTransport same-key test plus a manual live replay probe.
@@ -445,15 +451,15 @@ and receipt, payment details kept out of the model, the JSONL logs.
 ## Known gaps and tech debt (ranked)
 
 1. **The one-write guard is in memory only.** Restarting the terminal forgets an earlier write. The idempotency key
-   still protects retries of the same body, but not a fresh session that re-quotes. Production needs a
-   per-reservation write lock in a shared store.
+   still protects retries of the same body, but not a fresh session that re-quotes. Fix: a shared
+   per-reservation lock (see *What I'd change at scale*).
 2. **No billable-count job.** The billing rule is defined and graded, but nothing aggregates session logs into an
    invoice yet. A hard kill leaves a session with no outcome line; a ledger job must count that as unknown, never
    resolved.
 3. **PII in free text.** Card numbers, CVV/ZIP, emails and phone numbers are scrubbed; a typed surname or address
    still reaches the model and the log, and the handoff note can repeat the surname.
-4. **Logs are local files** with no rotation or retention, and `handoffs.jsonl` has no locking. Production ships
-   events to a log pipeline with access control and posts handoffs to a queue.
+4. **Logs are local files** with no rotation or retention, and `handoffs.jsonl` has no locking (see *What I'd
+   change at scale*).
 5. **Some behaviour fixes rest on few samples.** Seen once each, not yet fixed:
    - after "no thanks", the agent sometimes hands off as `customer_requested`;
    - a handoff note repeated an injected "the manager approved this" as fact, rather than as the customer's claim;
