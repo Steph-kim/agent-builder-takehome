@@ -138,23 +138,29 @@ test checks that table word for word against the code's enum and copy.
 
 ### One turn
 
-```
-customer text ──scrub (card numbers, CVV/ZIP, email, phone → [redacted])──► model (gpt-5-mini)
-                                                                              │ tools:
-                                                    lookup_reservation(id, last_name)   last name checked in code
-                                                    search_kb(query)                    authority-ranked articles
-                                                    check_extension(new_return_local)   gates + availability + quote
-                                                    handoff_to_human(reason, note)      model-raised reasons only
-                                                                              │
-                         ◄── reply ──────────────────────────────────────────┘
-terminal (code, not model):
-   if check_extension left a pending quote:
-       print card rendered from the stored quote  (weekday + local dates, line items, total, card brand/last-4)
-       "Approve this charge? (y/n)"   anything but y = no
-       y → email (input), CVV + ZIP (getpass)  → never in model, history or logs
-         → commit(): re-check every gate, re-quote, refuse if price moved, one-write guard,
-                     POST /extend with an idempotency key, assert response == approved card
-         → print receipt from the API response
+```mermaid
+flowchart TD
+    C([Customer]) -->|types| S["Scrubber<br/>card no., CVV/ZIP, email, phone → [redacted]"]
+    S --> M["Model: gpt-5-mini<br/>no write tool"]
+    M <--> L & K & X & H
+    subgraph Tools["Read-only tools: code checks every call"]
+        L["lookup_reservation<br/>surname checked in code"]
+        K["search_kb<br/>authority-ranked articles"]
+        X["check_extension<br/>gates + availability + quote"]
+        H["handoff_to_human<br/>packet + fixed customer copy"]
+    end
+    M -->|reply| C
+    X -->|ready: stores the quote| P
+    subgraph Terminal["Terminal: code only, after the model replies"]
+        P["Card rendered from the stored quote<br/>weekday + local dates, line items, total, card last 4"] --> Q{"Approve this charge? y/n"}
+        Q -->|anything but y| N["Nothing has been changed"]
+        Q -->|y| PAY["Email, then CVV + ZIP via getpass<br/>never in the model, history or logs"]
+        PAY --> CM["commit(): re-check every gate, re-quote,<br/>refuse on price drift, one-write guard"]
+        CM --> API[("Avis API<br/>POST /extend + idempotency key")]
+        API --> R["Receipt from the API response<br/>must equal the approved card"]
+    end
+    R -.->|receipt + system note: charged, nothing to approve| M
+    N -.->|system note: that card is closed| M
 ```
 
 **The model has no write tool.** This is the one deliberate change from my plan. The plan had a
