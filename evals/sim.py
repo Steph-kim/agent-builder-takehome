@@ -26,6 +26,7 @@ import yaml
 from openai import AsyncOpenAI, OpenAI
 
 from avis_agent import cli
+from avis_agent.agent import MODEL_TIMEOUT_S
 from avis_agent.client import AvisClient
 from avis_agent.config import REPO_ROOT, Settings, load_settings
 from avis_agent.kb import ARTICLES_PATH, KnowledgeBase, openai_embedder
@@ -399,7 +400,7 @@ async def main(argv: list[str]) -> int:
     kb = await KnowledgeBase.build(
         openai_embedder(AsyncOpenAI(api_key=settings.openai_api_key), settings.embed_model)
     )
-    customer_client = OpenAI(api_key=settings.openai_api_key)
+    customer_client = OpenAI(api_key=settings.openai_api_key, timeout=MODEL_TIMEOUT_S)  # also the judge's
     kb_text = ARTICLES_PATH.read_text() if ARTICLES_PATH.exists() else ""
     stamp = datetime.now().strftime("%Y%m%dT%H%M%S")
     log_dir = SIM_LOGS / stamp

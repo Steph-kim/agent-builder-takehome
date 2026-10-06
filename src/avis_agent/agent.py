@@ -9,7 +9,16 @@ from __future__ import annotations
 import time
 
 import openai
-from agents import Agent, MaxTurnsExceeded, ModelSettings, RunConfig, Runner, TResponseInputItem
+from agents import (
+    Agent,
+    MaxTurnsExceeded,
+    ModelSettings,
+    OpenAIResponsesModel,
+    RunConfig,
+    Runner,
+    TResponseInputItem,
+)
+from openai import AsyncOpenAI
 from openai.types.shared import Reasoning
 
 from .config import Settings
@@ -20,6 +29,11 @@ from .tools import AgentContext, check_extension, handoff_to_human, lookup_reser
 # Model calls per customer message. A normal turn needs at most ~3 (lookup, search, reply); hitting this
 # means the model is looping, which becomes an internal_error offer rather than a crash.
 MAX_TURNS = 8
+# The SDK default is 10 min per request with retries: a dropped connection left sims hanging 15+ min
+# (2026-10-06). p99 turn latency in the sims is 24s, so 60s x 2 tries bounds a stall at ~2 min, then
+# respond() transfers on the APITimeoutError.
+MODEL_TIMEOUT_S = 60.0
+MODEL_RETRIES = 1
 
 INSTRUCTIONS = """\
 You are Avis's customer service agent for rental extensions, in a text chat. Be warm, brief and plain. \
@@ -105,7 +119,10 @@ def build_agent(settings: Settings) -> Agent[AgentContext]:
         name="Avis agent",
         instructions=INSTRUCTIONS,
         tools=[lookup_reservation, search_kb, check_extension, handoff_to_human],
-        model=settings.model,
+        model=OpenAIResponsesModel(
+            settings.model,
+            AsyncOpenAI(api_key=settings.openai_api_key, timeout=MODEL_TIMEOUT_S, max_retries=MODEL_RETRIES),
+        ),
         model_settings=ModelSettings(parallel_tool_calls=False, reasoning=reasoning),
     )
 

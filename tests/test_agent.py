@@ -55,3 +55,23 @@ def test_turn_limit_becomes_internal_error_offer(tmp_path, monkeypatch):
     assert ctx.pending_handoff == ReasonCode.INTERNAL_ERROR and ctx.transfer is None
     assert new_history == [*history, {"role": "assistant", "content": reply}]
     assert '"gate": "max_turns"' in ctx.tracer.path.read_text()
+
+
+def test_a_silent_model_server_transfers_within_the_timeout(tmp_path, monkeypatch):
+    """kills: the SDK's 10-minute default timeout (a dropped connection hung sims 15+ min, 2026-10-06)."""
+    import socket
+    import time
+
+    srv = socket.socket()
+    srv.bind(("127.0.0.1", 0))
+    srv.listen()  # accepts the connection, never answers
+    monkeypatch.setenv("OPENAI_BASE_URL", f"http://127.0.0.1:{srv.getsockname()[1]}/v1")
+    monkeypatch.setattr(agent_mod, "MODEL_TIMEOUT_S", 0.3)
+    ctx = AgentContext(
+        client=None, tracer=Tracer("s1", tmp_path), thresholds=Thresholds(), handoff_log=tmp_path / "h.jsonl"
+    )
+    started = time.monotonic()
+    reply, _ = asyncio.run(respond(build_agent(SETTINGS), [{"role": "user", "content": "hi"}], ctx))
+    srv.close()
+    assert reply == agent_mod.MODEL_DOWN and ctx.transfer is not None
+    assert time.monotonic() - started < 5
