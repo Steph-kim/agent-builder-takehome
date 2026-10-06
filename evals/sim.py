@@ -1,6 +1,6 @@
 """Scenario sims: an LLM customer vs the agent on the live API, graded from the session trace (D12 item 4).
 
-    python -m evals.sim [scenario_id ...] [-k 3] [--customer-model gpt-4.1] [-v]
+    python -m evals.sim [scenario_id ...] [-k 3] [--customer-model gpt-4.1] [--no-judge] [-v]
 
 The customer LLM sees only its persona and the agent's lines; the email/CVV/ZIP come from the scenario
 file through the same `read`/`read_secret` seams the terminal uses (the CLI never imports this module).
@@ -31,6 +31,7 @@ from avis_agent.config import REPO_ROOT, Settings, load_settings
 from avis_agent.kb import KnowledgeBase, openai_embedder
 from avis_agent.trace import Tracer, git_sha
 from evals.faults import FaultyClient
+from evals.judge import CX, DEFAULT_JUDGE_MODEL, judge
 
 SCENARIOS = Path(__file__).with_name("scenarios.yaml")
 RESULTS_DIR = Path(__file__).with_name("results")
@@ -79,6 +80,7 @@ class Result:
     turns: int = 0
     seconds: float = 0.0
     log: str = ""
+    cx: CX | None = None  # judge scores — reported, never gated
 
     @property
     def passed(self) -> bool:
@@ -305,10 +307,12 @@ def report(results: list[Result], meta: dict[str, str]) -> str:
     lines = [
         f"# Scenario sims — {meta['stamp']}",
         "",
-        f"k={k} · agent `{meta['agent']}` · customer `{meta['customer']}` · git `{meta['git']}`",
+        f"k={k} · agent `{meta['agent']}` · customer `{meta['customer']}` · judge `{meta['judge']}` · "
+        f"git `{meta['git']}`",
         "",
-        "| scenario | pass^k | runs passed | outcomes (per run) | avg turns | avg time | failed checks |",
-        "|---|---|---|---|---|---|---|",
+        "| scenario | pass^k | runs passed | outcomes (per run) | CX (1-5) | avg turns | avg time "
+        "| failed checks |",
+        "|---|---|---|---|---|---|---|---|",
     ]
     ids = list(dict.fromkeys(r.id for r in results))
     for sid in ids:
@@ -317,10 +321,13 @@ def report(results: list[Result], meta: dict[str, str]) -> str:
         mark = "PASS" if n_pass == len(runs) else ("**SAFETY**" if any(r.safety for r in runs) else "fail")
         outcomes = " / ".join(",".join(r.outcomes) for r in runs)
         checks = "; ".join(f"r{r.run}: {c}" for r in runs for c in r.safety + r.failures) or "—"
+        judged = [r.cx.mean for r in runs if r.cx]
+        cx = f"{sum(judged) / len(judged):.1f}" if judged else "—"
         turns = sum(r.turns for r in runs) / len(runs)
         secs = sum(r.seconds for r in runs) / len(runs)
         lines.append(
-            f"| {sid} | {mark} | {n_pass}/{len(runs)} | {outcomes} | {turns:.1f} | {secs:.0f}s | {checks} |"
+            f"| {sid} | {mark} | {n_pass}/{len(runs)} | {outcomes} | {cx} | {turns:.1f} | {secs:.0f}s "
+            f"| {checks} |"
         )
     all_pass = sum(all(r.passed for r in results if r.id == sid) for sid in ids)
     safe = sum(not r.safety for r in results)
@@ -330,6 +337,19 @@ def report(results: list[Result], meta: dict[str, str]) -> str:
         f"Runs passed: {sum(r.passed for r in results)}/{len(results)}. "
         f"Safety: {safe}/{len(results)} sessions clean.",
     ]
+    judged = [r for r in results if r.cx]
+    if judged:
+        means = {d: sum(r.cx.scores[d] for r in judged) / len(judged) for d in judged[0].cx.scores}
+        lines += [
+            "",
+            "CX judge (not gated; uncalibrated — read the lowest transcripts first): "
+            + " · ".join(f"{d} {v:.1f}" for d, v in means.items()),
+        ]
+        for sid in ids:
+            runs = [r for r in judged if r.id == sid]
+            if runs:
+                low = min(runs, key=lambda r: r.cx.mean)
+                lines.append(f"- {sid} (lowest r{low.run}, {low.cx.mean:.1f}): {low.cx.weakest}")
     warnings = [f"- {r.id} r{r.run}: {w}" for r in results for w in r.warnings]
     if warnings:
         lines += ["", "Grounding warnings (not gated):", *warnings]
@@ -352,6 +372,8 @@ async def main(argv: list[str]) -> int:
     ap.add_argument("ids", nargs="*", help="scenario ids (default: all)")
     ap.add_argument("-k", type=int, default=1, help="runs per scenario (pass^k)")
     ap.add_argument("--customer-model", default=DEFAULT_CUSTOMER_MODEL)
+    ap.add_argument("--judge-model", default=DEFAULT_JUDGE_MODEL)
+    ap.add_argument("--no-judge", action="store_true", help="skip the CX judge")
     ap.add_argument("-v", "--verbose", action="store_true", help="stream transcripts")
     args = ap.parse_args(argv)
 
@@ -376,6 +398,7 @@ async def main(argv: list[str]) -> int:
         "k": str(args.k),
         "agent": settings.model,
         "customer": args.customer_model,
+        "judge": "off" if args.no_judge else args.judge_model,
         "git": git_sha(),
     }
 
@@ -396,6 +419,11 @@ async def main(argv: list[str]) -> int:
             r.run, r.seconds = run, time.monotonic() - started
             r.log = str(path.relative_to(REPO_ROOT))
             r.turns = sum(1 for e in events if e.get("event") == "customer.msg")
+            if not args.no_judge:
+                try:
+                    r.cx = judge(customer_client, args.judge_model, events)
+                except Exception as e:  # a judge hiccup never fails the run
+                    print(f"  judge failed: {type(e).__name__}", file=sys.stderr)
             print(f"  {'PASS' if r.passed else 'FAIL'} {r.outcomes} {r.safety + r.failures}", flush=True)
             results.append(r)
 
