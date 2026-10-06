@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import getpass
 import hashlib
+import re
 import string
 import sys
 from collections.abc import Callable
@@ -47,6 +48,10 @@ CHARGED = (
     "change is made: no card is showing and nothing is left to approve, so never ask them to approve or "
     "confirm anything for it."
 )
+# The prompt asks for [kb_…] citations so every policy claim is traceable. They mean nothing to a customer, so
+# they're logged (agent.msg "cites") and stripped from what's printed. Handles "[kb_a_01][kb_b_02]" and
+# "[kb_a_01, kb_b_02]".
+CITATION = re.compile(r"\s*\[(kb_[a-z]+_\d+(?:\s*,\s*kb_[a-z]+_\d+)*)\]")
 PAYMENT_INTRO = (
     "To confirm, enter the email on the booking, then the card's security code and billing ZIP. "
     "They go straight to Avis — the assistant never sees them."
@@ -188,8 +193,13 @@ def _closed(history: list, write: Callable[[str], None], t: Tracer) -> None:
 
 
 def _say(write: Callable[[str], None], t: Tracer, text: str) -> None:
-    t.emit("agent.msg", text=scrub(text).text)
-    write(f"Agent: {text}")
+    cites = [c.strip() for m in CITATION.finditer(text) for c in m.group(1).split(",")]
+    shown = CITATION.sub("", text)
+    if cites:
+        t.emit("agent.msg", text=scrub(shown).text, cites=cites)
+    else:
+        t.emit("agent.msg", text=scrub(shown).text)
+    write(f"Agent: {shown}")
 
 
 def _short_hash(text: str) -> str:

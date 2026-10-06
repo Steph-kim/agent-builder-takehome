@@ -26,7 +26,7 @@ LOG_DIR = REPO_ROOT / "logs" / "sessions"
 EVENT_FIELDS: dict[str, frozenset[str]] = {
     "session.start": frozenset({"git_sha", "model", "prompt_hash", "kb_hash"}),
     "customer.msg": frozenset({"text", "redacted"}),
-    "agent.msg": frozenset({"text"}),
+    "agent.msg": frozenset({"text", "cites"}),
     "llm.turn": frozenset({"latency_ms", "input_tokens", "output_tokens"}),
     "tool.call": frozenset({"name", "args"}),
     "tool.result": frozenset({"name", "result", "error"}),

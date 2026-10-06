@@ -308,3 +308,14 @@ def test_no_card_when_the_same_turn_transferred(tmp_path, monkeypatch):
 
     out, _ = run_chat(tmp_path, monkeypatch, ["extend it, also the car is grinding"], model)
     assert not any(o.startswith("──── Confirm") for o in out)
+
+
+def test_citations_are_logged_but_never_printed(tmp_path, monkeypatch):
+    """kills: [kb_…] ids shown to the customer; kills: the ids dropped from the log (grounding audit)."""
+    reply = "Grace is 30 minutes [kb_ext_01]. Extending is cheaper [kb_ext_05][kb_fee_02] [kb_a_01, kb_b_02]."
+    out, events = run_chat(tmp_path, monkeypatch, ["grace?"], lambda h, c: reply)
+    shown = next(o for o in out if o.startswith("Agent: Grace"))
+    assert shown == "Agent: Grace is 30 minutes. Extending is cheaper."
+    msg = next(e for e in events if e["event"] == "agent.msg" and e["text"].startswith("Grace"))
+    assert msg["text"] == shown.removeprefix("Agent: ")
+    assert msg["cites"] == ["kb_ext_01", "kb_ext_05", "kb_fee_02", "kb_a_01", "kb_b_02"]
