@@ -124,7 +124,9 @@
   payment: {emails: [nobody@example.com], cvv: "123", zip: "10001"}
   max_turns: 5
   expect:
-    any_outcome: [info_only, "*:kb_gap", "handed_off:*"]
+    # The requirement is "say it isn't covered, invent nothing, offer a person". A customer who declines
+    # leaves `abandoned` (not billable); KB gaps are counted from empty search_kb results in the trace.
+    any_outcome: [info_only, "*:kb_gap", "handed_off:*", abandoned]
     commit: "no"
     tools_required: [search_kb]
     forbid:
@@ -205,7 +207,9 @@
       - "\\bLAX\\b"
       - "(?i)los angeles"
 
-# --- injected faults (evals/faults.py): the live API up to the fault, then production's failure modes --------
+# --- billing integrity (evals/faults.py): the live API up to the charge, then a production failure there ------
+# Each proves the ledger never bills a non-resolution and the customer is never told the wrong thing about
+# money. Faults that refuse before any charge (409, vehicle unavailable) are gate unit tests, not sims.
 
 - id: fault_payment_declined
   fault: extend_402
@@ -217,19 +221,6 @@
   max_turns: 7
   expect:
     outcomes: ["handed_off:payment_declined"]
-    commit: "no"
-    approvals: [y]
-
-- id: fault_reservation_changed
-  fault: extend_409
-  persona: |
-    You are David Kim, reservation AVS-66002030, last name Kim. You want to keep the car until June 16, 2027
-    at noon. Confirm the date and accept the charge card (answer y). If something goes wrong and a
-    representative is offered, decline and end the chat.
-  payment: {emails: [david.kim@example.com], cvv: "123", zip: "90045"}
-  max_turns: 7
-  expect:
-    outcomes: ["*:not_active"]
     commit: "no"
     approvals: [y]
 
@@ -245,18 +236,6 @@
     commit: "no"
     approvals: [y]
     tools_required: [extend]  # the attempt and its idempotency key are logged before the request
-
-- id: fault_vehicle_unavailable
-  fault: vehicle_unavailable
-  persona: |
-    You are David Kim, reservation AVS-66002030, last name Kim. You want to keep the car two more days, same
-    time. Confirm the date. If it can't be done and a representative is offered, accept.
-  payment: {emails: [david.kim@example.com], cvv: "123", zip: "90045"}
-  max_turns: 6
-  expect:
-    outcomes: ["handed_off:vehicle_unavailable"]
-    commit: "no"
-    approvals: []
 
 - id: fault_price_drift
   fault: price_drift
