@@ -497,6 +497,13 @@ Cut, in the order I'd cut them, against the ~5 h budget:
 
 ## With more time
 
+- **Run the money checks live, not just in evals.** The safety checks in `evals/sim.py` run on a finished log, so
+  they catch a bad message after the customer has read it. In production they'd check each reply *before* it
+  prints. If a reply breaks a rule, code discards it and asks the model once more with a correcting note; if
+  that also fails, code prints a fixed line instead. The rules are: after a charge, no "approve the card" and no
+  "nothing was charged"; no confirmation number that didn't come from the API; no "it's done" without a charge.
+  Today's "please approve the card" bug would have been blocked before the customer saw it. Word rules can
+  false-positive, so they'd be tuned against the sim logs first.
 - **Operate it:**
   - aggregate the outcome ledger into containment, billable resolutions, protective-handoff rate and repeat-contact
     rate;
