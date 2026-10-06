@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="864" height="1018" viewBox="0 0 864 1018">
+<rect width="864" height="1018" rx="10" fill="#18181b"/>
+<circle cx="20" cy="18" r="5.5" fill="#ff5f57"/>
+<circle cx="38" cy="18" r="5.5" fill="#febc2e"/>
+<circle cx="56" cy="18" r="5.5" fill="#28c840"/>
+<text x="432.0" y="22" fill="#71717a" font-family="ui-sans-serif, -apple-system, Segoe UI, sans-serif" font-size="12" text-anchor="middle">python -m avis_agent</text>
+<g font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="13" xml:space="preserve">
+<text x="24" y="58"><tspan fill="#8b7cff">──</tspan><tspan fill="#8b7cff" font-weight="700"> Avis support </tspan><tspan fill="#8b7cff">────────────────────────────────────────────────────────────────────────────────</tspan></text>
+<text x="24" y="77"><tspan fill="#e4e4e7" fill-opacity="0.55">type &#x27;exit&#x27; or Ctrl-D to leave</tspan></text>
+<text x="24" y="96"><tspan fill="#8b7cff" font-weight="700">Agent:</tspan><tspan fill="#e4e4e7"> How can I help?</tspan></text>
+<text x="24" y="134"><tspan fill="#22d3ee" font-weight="700">You:</tspan><tspan fill="#e4e4e7">   hi! will i get charged a late fee if i return my car late?</tspan></text>
+<text x="24" y="153"><tspan fill="#8b7cff" font-weight="700">Agent:</tspan><tspan fill="#e4e4e7"> If you return after your scheduled time and past the grace period, a late return fee can</tspan></text>
+<text x="24" y="172"><tspan fill="#e4e4e7">       apply.</tspan></text>
+<text x="24" y="210"><tspan fill="#e4e4e7">       - Avis provides a 30‑minute grace period after the scheduled return time; after that</tspan></text>
+<text x="24" y="229"><tspan fill="#e4e4e7">         late charges begin.</tspan></text>
+<text x="24" y="248"><tspan fill="#e4e4e7">       - A $29 late return fee is charged to standard members in addition to any daily charges</tspan></text>
+<text x="24" y="267"><tspan fill="#e4e4e7">         for the extra time; Avis Preferred members are exempt from the late return fee.</tspan></text>
+<text x="24" y="286"><tspan fill="#e4e4e7">       - If you know you’ll be late, extending the rental before your return time is usually</tspan></text>
+<text x="24" y="305"><tspan fill="#e4e4e7">         cheaper — request an extension with your reservation number and the new local return</tspan></text>
+<text x="24" y="324"><tspan fill="#e4e4e7">         date/time.</tspan></text>
+<text x="24" y="362"><tspan fill="#22d3ee" font-weight="700">You:</tspan><tspan fill="#e4e4e7">   ok can i extend my rental to tomorrow at 6pm? my res number is AVS-77001020.</tspan></text>
+<text x="24" y="381"><tspan fill="#8b7cff" font-weight="700">Agent:</tspan><tspan fill="#e4e4e7"> I can help with that. What’s the last name on the reservation?</tspan></text>
+<text x="24" y="419"><tspan fill="#22d3ee" font-weight="700">You:</tspan><tspan fill="#e4e4e7">   patel</tspan></text>
+<text x="24" y="438"><tspan fill="#8b7cff" font-weight="700">Agent:</tspan><tspan fill="#e4e4e7"> I found your reservation AVS-77001020 at SFO. You want to extend the return to Tuesday,</tspan></text>
+<text x="24" y="457"><tspan fill="#e4e4e7">       October 6, 2026 at 6:00 PM local time — is that right?</tspan></text>
+<text x="24" y="495"><tspan fill="#22d3ee" font-weight="700">You:</tspan><tspan fill="#e4e4e7">   yep, that’s right!</tspan></text>
+<text x="24" y="514"><tspan fill="#e4e4e7" fill-opacity="0.55" font-style="italic">(Checking availability…)</tspan></text>
+<text x="24" y="533"><tspan fill="#8b7cff" font-weight="700">Agent:</tspan><tspan fill="#e4e4e7"> A confirmation card with the price is showing now — please review and approve it there.</tspan></text>
+<text x="24" y="552"><tspan fill="#8b7cff">╭─ </tspan><tspan fill="#8b7cff" font-weight="700">Confirm your extension</tspan><tspan fill="#8b7cff"> ───────────────────────────────╮</tspan></text>
+<text x="24" y="571"><tspan fill="#8b7cff">│</tspan><tspan fill="#e4e4e7"> </tspan><tspan fill="#e4e4e7" fill-opacity="0.55">Reservation    </tspan><tspan fill="#e4e4e7">AVS-77001020</tspan><tspan fill="#e4e4e7">                            </tspan><tspan fill="#8b7cff">│</tspan></text>
+<text x="24" y="590"><tspan fill="#8b7cff">│</tspan><tspan fill="#e4e4e7"> </tspan><tspan fill="#e4e4e7" fill-opacity="0.55">Return now     </tspan><tspan fill="#e4e4e7">Monday, October 5, 2026 at 11:07 PM PDT</tspan><tspan fill="#e4e4e7"> </tspan><tspan fill="#8b7cff">│</tspan></text>
+<text x="24" y="609"><tspan fill="#8b7cff">│</tspan><tspan fill="#e4e4e7"> </tspan><tspan fill="#e4e4e7" fill-opacity="0.55">New return     </tspan><tspan fill="#e4e4e7">Tuesday, October 6, 2026 at 6:00 PM PDT</tspan><tspan fill="#e4e4e7"> </tspan><tspan fill="#8b7cff">│</tspan></text>
+<text x="24" y="628"><tspan fill="#8b7cff">│</tspan><tspan fill="#e4e4e7"> </tspan><tspan fill="#e4e4e7" fill-opacity="0.55">Extra days     </tspan><tspan fill="#e4e4e7">1 × $54.99 = $54.99</tspan><tspan fill="#e4e4e7">                     </tspan><tspan fill="#8b7cff">│</tspan></text>
+<text x="24" y="647"><tspan fill="#8b7cff">│</tspan><tspan fill="#e4e4e7"> </tspan><tspan fill="#e4e4e7" fill-opacity="0.55">Taxes &amp; fees   </tspan><tspan fill="#e4e4e7">$5.09</tspan><tspan fill="#e4e4e7">                                   </tspan><tspan fill="#8b7cff">│</tspan></text>
+<text x="24" y="666"><tspan fill="#8b7cff">│</tspan><tspan fill="#e4e4e7"> </tspan><tspan fill="#e4e4e7" fill-opacity="0.55">Total          </tspan><tspan fill="#e4e4e7" font-weight="700">$60.08 USD</tspan><tspan fill="#e4e4e7">                              </tspan><tspan fill="#8b7cff">│</tspan></text>
+<text x="24" y="685"><tspan fill="#8b7cff">│</tspan><tspan fill="#e4e4e7"> </tspan><tspan fill="#e4e4e7" fill-opacity="0.55">Charged to     </tspan><tspan fill="#e4e4e7">Mastercard ending 2941</tspan><tspan fill="#e4e4e7">                  </tspan><tspan fill="#8b7cff">│</tspan></text>
+<text x="24" y="704"><tspan fill="#8b7cff">╰────────────────────────────────────────────────────────╯</tspan></text>
+<text x="24" y="723"><tspan fill="#f5a524" font-weight="700">Approve this charge? (y/n): </tspan><tspan fill="#e4e4e7">y</tspan></text>
+<text x="24" y="742"><tspan fill="#8b7cff" font-weight="700">Agent:</tspan><tspan fill="#e4e4e7"> To confirm, enter the email on the booking, then the card&#x27;s security code and billing</tspan></text>
+<text x="24" y="761"><tspan fill="#e4e4e7">       ZIP. They go straight to Avis — the assistant never sees them.</tspan></text>
+<text x="24" y="780"><tspan fill="#e4e4e7" fill-opacity="0.55">Email on the booking: </tspan><tspan fill="#e4e4e7">priya.patel@example.com</tspan></text>
+<text x="24" y="799"><tspan fill="#e4e4e7" fill-opacity="0.55">Card security code (hidden): </tspan><tspan fill="#e4e4e7">123</tspan></text>
+<text x="24" y="818"><tspan fill="#e4e4e7" fill-opacity="0.55">Billing ZIP (hidden): </tspan><tspan fill="#e4e4e7">94103</tspan></text>
+<text x="24" y="837"><tspan fill="#22c55e">╭─ </tspan><tspan fill="#22c55e" font-weight="700">Extension confirmed</tspan><tspan fill="#22c55e"> ──────────────────────────────────╮</tspan></text>
+<text x="24" y="856"><tspan fill="#22c55e">│</tspan><tspan fill="#e4e4e7"> </tspan><tspan fill="#e4e4e7" fill-opacity="0.55">Confirmation   </tspan><tspan fill="#e4e4e7" font-weight="700">EXT-770010-461</tspan><tspan fill="#e4e4e7">                          </tspan><tspan fill="#22c55e">│</tspan></text>
+<text x="24" y="875"><tspan fill="#22c55e">│</tspan><tspan fill="#e4e4e7"> </tspan><tspan fill="#e4e4e7" fill-opacity="0.55">New return     </tspan><tspan fill="#e4e4e7">Tuesday, October 6, 2026 at 6:00 PM PDT</tspan><tspan fill="#e4e4e7"> </tspan><tspan fill="#22c55e">│</tspan></text>
+<text x="24" y="894"><tspan fill="#22c55e">│</tspan><tspan fill="#e4e4e7"> </tspan><tspan fill="#e4e4e7" fill-opacity="0.55">Charged        </tspan><tspan fill="#e4e4e7" font-weight="700">$60.08 USD to the card on file</tspan><tspan fill="#e4e4e7">          </tspan><tspan fill="#22c55e">│</tspan></text>
+<text x="24" y="913"><tspan fill="#22c55e">╰────────────────────────────────────────────────────────╯</tspan></text>
+<text x="24" y="932"><tspan fill="#8b7cff" font-weight="700">Agent:</tspan><tspan fill="#e4e4e7"> You&#x27;re all set — your extension is confirmed. Is there anything else I can help you with?</tspan></text>
+<text x="24" y="970"><tspan fill="#22d3ee" font-weight="700">You:</tspan><tspan fill="#e4e4e7">   nope, thanks!</tspan></text>
+<text x="24" y="989"><tspan fill="#8b7cff" font-weight="700">Agent:</tspan><tspan fill="#e4e4e7"> You&#x27;re welcome — have a great trip!</tspan></text>
+</g>
+</svg>

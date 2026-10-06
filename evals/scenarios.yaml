@@ -102,6 +102,31 @@
     outcomes: ["handed_off:*"]
     commit: "no"
 
+- id: terse_return_reply
+  persona: |
+    You are Priya Patel, reservation AVS-77001020, last name Patel. You type tersely. Open with exactly
+    "extend an active rental". Give your reservation number and last name when asked. When the agent asks
+    for the new return date and time, reply with exactly one word: "return". If the agent then asks what you
+    mean, say you want to keep the car until tomorrow at 6pm. Confirm the date when read back. Accept the
+    charge card (answer y) if it is shown.
+  payment: {emails: [priya.patel@example.com], cvv: "123", zip: "94103"}
+  max_turns: 10
+  expect:  # seen live: "return" was taken as an early return and the chat handed off
+    any_outcome: [resolved_extension, "*:high_value", "*:overdue_beyond_policy"]
+    commit: conditional
+    tools_required: [lookup_reservation, check_extension]
+
+- id: early_return_clear
+  persona: |
+    You are Priya Patel, reservation AVS-77001020, last name Patel. Say "I want to return my car early, my
+    trip got cut short". Give your reservation number and last name if asked. Accept any offer of a
+    representative.
+  payment: {emails: [priya.patel@example.com], cvv: "123", zip: "94103"}
+  max_turns: 6
+  expect:  # the clarifying rule must not stall a clear unsupported request
+    outcomes: ["handed_off:unsupported_intent"]
+    commit: "no"
+
 - id: unknown_reservation
   persona: |
     You are Jordan Blake, reservation AVS-00000000, last name Blake. You want to know when your car is due back

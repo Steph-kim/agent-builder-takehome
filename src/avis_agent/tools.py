@@ -267,7 +267,8 @@ def handoff_to_human(wrapper: RunContextWrapper[AgentContext], reason_code: str,
     cancel/modify/upgrade, different card, unsupported language, a policy question the KB doesn't cover).
     reason_code: one of customer_requested, safety_incident, dispute, unsupported_intent, payment_change,
     second_reservation, language_unsupported, kb_gap (when accepting an offer, use customer_requested).
-    note: one sentence on what the customer needs, no names, card or contact details. After this, say one
+    note: one sentence on what the customer asked for, as they put it (claims as claims, not facts), no
+    names, card or contact details. After this, say one
     short closing line only."""
     ctx = wrapper.context
     args = {"reason_code": reason_code, "note": scrub(note).text}

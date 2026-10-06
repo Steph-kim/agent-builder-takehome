@@ -12,7 +12,7 @@ import pytest
 
 from avis_agent import agent as agent_mod
 from avis_agent import cli
-from avis_agent.cli import CARD_CLOSED, CHARGED
+from avis_agent.cli import ALL_SET, CARD_CLOSED, CHARGED
 from avis_agent.config import Settings
 from avis_agent.extend import NOTHING_CHANGED, CommitResult, PendingExtension, render_receipt
 from avis_agent.handoff import request_transfer, transfer
@@ -79,7 +79,9 @@ def test_transfer_prints_code_summary_and_ends_chat(tmp_path, monkeypatch):
     assert out[0] == "Agent: How can I help?"
     assert "— Connecting you with a representative —" in out[-1]
     assert "Connecting you." not in out  # the model's closing line is replaced, not printed
-    assert "person." in out[-1] and "person.." not in out[-1]
+    # the model's note goes to the representative, never read back: live, a guessed "early return" was
+    # shown to a customer who had asked to extend
+    assert "what you asked for" in out[-1] and "wants a person" not in out[-1]
     assert sum(e["event"] == "customer.msg" for e in events) == 2  # third line never read
     assert events[-1]["outcomes"] == ["handed_off:customer_requested"]
 
@@ -192,6 +194,8 @@ def test_yes_collects_payment_off_model_and_prints_the_receipt(tmp_path, monkeyp
     card = next(o for o in out if o.startswith("──── Confirm"))
     assert "$100.49 USD" in card and "Visa ending 4832" in card
     assert receipt in out
+    # kills: the customer left at a bare prompt after the receipt, with no close or "anything else?"
+    assert out[out.index(receipt) + 1] == f"Agent: {ALL_SET}"
     ((payment, retry_allowed),) = calls
     assert (payment.email, payment.cvv, payment.billing_zip) == ("a@b.co", "8641", "97035") and retry_allowed
     after = json.dumps(histories[-1])
