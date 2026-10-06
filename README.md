@@ -82,8 +82,10 @@ $4,000+) or dead-ending with "please call us".
   All 22 codes and their exact customer copy are in [`docs/aop-extend.md`](docs/aop-extend.md) §7; a test checks
   that table against the code word for word.
 
-**What counts as a resolution.** Decagon bills per resolution, so "what counts" is decided **deterministically from
-the log**, never by the model. Every request gets one outcome: `resolved_extension`, `handed_off:<reason>`,
+**What counts as a resolution.** Decagon offers per-resolution pricing alongside per-conversation, and its own
+[pricing post](https://decagon.ai/blog/pricing-ai-agents) names the catch: "you never want to be in a situation where you're arguing over what a 'resolution'
+is." Under either plan, resolution rate is the number the pilot is judged on. So "what counts" is decided
+**deterministically from the log**, never by the model. Every request gets one outcome: `resolved_extension`, `handed_off:<reason>`,
 `offered:<reason>`, `info_only`, `abandoned`, `interrupted` or `error`. An extension is billable **only if** it has
 a confirmation number, the API response matches the card the customer approved, **and** no later handoff in the
 session concerns the same change. It's deliberately conservative, so every billed line traces back to a session log
