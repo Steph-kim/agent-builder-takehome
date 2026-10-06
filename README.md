@@ -203,6 +203,9 @@ decision away, and payment details would sit in the run state.
 
 ### What the model sees vs. what code owns
 
+The model handles the conversation. Anything that decides money, identity or eligibility is code, and the model
+only sees the result.
+
 | Need | Model receives | Code owns |
 |---|---|---|
 | Identity | `verified: true` and a reduced reservation view, or one generic "couldn't verify" | Surname match, 5-lookup cap, which fields are disclosed |
@@ -216,50 +219,100 @@ decision away, and payment details would sit in the run state.
 
 ### Key choices
 
-**Gates in code (`policy.py`, `extend.py`), not in the prompt.** Each gate returns a reason code and fixed customer
-copy. Threshold values never appear in the prompt (a test enforces it), so the model can't coach a customer to stay
-under a limit. `commit` re-runs every gate, because time passes while the card is open: a customer 40 minutes from
-their return can cross into overdue.
+Each choice starts with what it means in plain terms, then how it works.
 
-**Identity: reservation id + last name to *see*, email to *change*.** Nothing is asked until the request needs it.
-Wrong id and wrong name get the same message. Five failed lookups hand off: the ids look sequential, so this stops
-enumeration. Email is collected after `y` with CVV/ZIP, and the API's 403 is the only email check. Rejected:
-email-only verification (anyone with an id would see the rental).
+#### 1. Business rules live in code, not in the prompt
 
-**Payment details never touch the model or the logs.** CVV/ZIP are read with `getpass`, held in a `repr=False`
-dataclass for one call, then deleted. Card numbers typed in chat are redacted (Luhn check). **Card on file only:**
-a different card is a `payment_change` handoff. Taking a card number in an LLM chat would break the rule above; the
-production fix is a tokenised payment field outside the agent.
+> The AI can't be talked past a limit, because the limits aren't its decision.
 
-**Dates.** The model sends local wall-clock time; code attaches the zone (IATA → IANA, falling back to the
-reservation's offset). The card shows the weekday, so a wrong "Friday" is visible before `y`.
+- Every eligibility rule (overdue, price cap, length cap, availability, market…) is a function in `policy.py` /
+  `extend.py` that returns a reason code and fixed customer wording.
+- The limit values never appear in the prompt (a test enforces it), so the model can't coach a customer to stay
+  just under one.
+- The rules run twice: when the quote is shown, and again at the moment of charging. Time passes while the card
+  is open, and a customer 40 minutes from their return time can become overdue.
+- *Rejected:* prompt-only guardrails.
 
-**API client: one retry owner (`client.py`).**
-- Reads retry 5xx and timeouts with jittered backoff. `/availability` gets 10 s and 1 retry because it 504s at
-  ~8.5 s; "Checking availability…" is printed so the wait isn't silent. 4xx is never retried.
-- The extend write: 15 s timeout, 2 retries, **one idempotency key per exact request body**. I probed the live API
-  and found **idempotency replay ignores the body**: the same key with a new date replays the old success. So a
-  re-quoted commit always gets a new key.
-- Exhausted retries → `OutcomeUnknown` → transfer with the key in the packet.
-- Model calls time out at 60 s × 2 tries and then transfer. The SDK default is 10 minutes per attempt, which left
-  sessions hanging on a dead connection.
+#### 2. Two levels of identity: see vs. change
 
-**Retrieval (`kb.py`): retrieval explains, the API decides.**
-- Every *sentence* of the 30 articles is embedded once at startup, and each article is scored by its best sentence.
-  The top 4 above a 0.45 floor are re-ordered by authority (official > help-center > legacy), then recency. Legacy
-  articles are labelled outdated, and a `SUPERSEDED_BY` map pulls in the official replacement.
-- Why sentences: whole-article chunks missed the official 30-minute grace period (one sentence inside `kb_ext_01`)
-  on all 3 grace queries, while the legacy article is *all* about grace. Recall went from 14/17 to 17/17.
-- Any number about *this* rental comes from the reservation or the quote, never an article.
-- Rejected: a vector DB for ~160 vectors; hosted file search (no control over authority); the whole KB in the
-  prompt (it puts the legacy "2-hour grace" in front of the model every turn).
+> Anyone with a reservation number and last name can *look*; only someone who knows the booking email can *change*
+> anything.
 
-**Why the Agents SDK.** Tool loop, typed tools and turn limits for free. The parts that move money don't depend on
-the framework: they're plain code the terminal calls.
+- Nothing is asked until the request needs it. A policy question needs no identity at all.
+- Code checks the last name against the reservation before any detail reaches the model. A wrong number and a wrong
+  name get the same reply, so a guesser learns nothing.
+- After 5 failed lookups the chat goes to a human. Reservation numbers look sequential, so this stops someone
+  working through them.
+- The email is asked for after the customer approves the card, alongside CVV and ZIP. Avis's API checks it (a 403
+  if wrong).
+- *Rejected:* email-only verification, where anyone with a reservation number would see the rental.
+
+#### 3. Payment details never touch the AI or the logs
+
+> The customer's CVV and ZIP go straight from the keyboard to Avis. The model never sees them, and neither do the
+> logs.
+
+- CVV and ZIP are typed into hidden prompts (`getpass`), held in memory for one API call, then deleted.
+- A card number typed into the chat by mistake is detected (Luhn check) and redacted before the model or the log
+  sees it.
+- **Card on file only.** Paying with a different card is handed to a human, because taking a card number in an AI
+  chat would break this rule. The production answer is a secure payment field from Avis's payment provider,
+  outside the agent.
+
+#### 4. Dates are always in the rental location's local time
+
+> "Friday at 2pm" means 2pm where the car is being returned, and the customer sees the weekday before agreeing.
+
+- The model only proposes a local date and time (`2027-06-18T14:00`). Code attaches the time zone, using an airport
+  code → time zone map and falling back to the reservation's own offset.
+- The model is told "now" in the location's time zone, so "tomorrow" means tomorrow *there*.
+- The card shows the weekday, so a wrong "Friday" is visible before the customer types `y`.
+
+#### 5. Safe retries, and never charging twice
+
+> If Avis's API is slow or flaky, the agent retries reads safely, but a charge is never sent twice. If it can't
+> tell whether a charge went through, it says so honestly and passes the customer to a human.
+
+- **One place owns retries** (`client.py`), so retries never stack.
+- **Reads** retry server errors and timeouts with exponential backoff plus jitter. Client errors (4xx) are never
+  retried. Availability gets a longer 10 s timeout because it can take ~8.5 s, and the customer sees "Checking
+  availability…" so the wait isn't silent.
+- **The charge** has a 15 s timeout and 2 retries, all with the same *idempotency key*: a unique id that tells
+  Avis "this is the same request again, don't charge twice".
+- I found the API replays a key's first result even when the request changes: the same key with a *new date*
+  returns the *old* success. So every distinct request body gets its own key.
+- If every retry fails, the outcome is unknown. The customer hears "it *may* have gone through", never "it
+  failed", and a human gets the key to check.
+- **Model calls** time out after 60 s, try twice, then hand to a human. The default was 10 minutes per attempt,
+  which left a session hanging on a dead connection.
+
+#### 6. Policy answers come from the most authoritative article
+
+> When help articles disagree (the old "2-hour grace period" vs. the current 30 minutes), the agent uses the
+> official, newest one. Anything about *this* rental's price comes from Avis's API, never from an article.
+
+- At startup, every *sentence* of the 30 articles is embedded, and each article is scored by its best-matching
+  sentence. The top 4 above a relevance floor (0.45) are re-ordered official > help-center > legacy, then by date.
+  Legacy articles are labelled outdated, and a map pulls in each one's official replacement.
+- Why sentences: scoring whole articles missed the official 30-minute rule (one sentence inside a long article) on
+  all 3 grace-period questions, because the legacy article is *entirely* about grace. Recall went from 14/17 to
+  17/17.
+- *Rejected:* a vector database for ~160 vectors (overkill); hosted file search (no control over which article
+  wins); the whole KB in the prompt (it would put the outdated "2 hours" in front of the model every turn).
+
+#### 7. Why the OpenAI Agents SDK
+
+> It provides the conversation loop and tool plumbing; everything that moves money is plain code outside it.
+
+- The SDK gives the tool loop, typed tools and turn limits for free, and the starter used it.
+- The charge path doesn't depend on the framework, so swapping it wouldn't touch the money logic.
 
 ---
 
 ## When things go wrong
+
+The rule: the customer always hears the truth in plain words, is never charged on a guess, and is passed to a
+human with full context whenever the agent can't finish.
 
 | Failure | Customer sees | Logged outcome |
 |---|---|---|
@@ -429,7 +482,26 @@ and receipt, payment details kept out of the model, the JSONL logs.
 - **Continuous evals:** sample live traces into the scenario suite; re-run pass^k on every prompt, model or KB
   change; run the judge over production transcripts as a triage filter; check the KB for conflicts before it ships.
 
-**Adding Cancel** reuses the same shape:
+### What I'd change at scale
+
+None of this is needed for a one-terminal pilot. Each item is the step after what's built.
+
+| Today (pilot) | At scale | Why |
+|---|---|---|
+| Exponential backoff + jitter per request | Add a **circuit breaker** and a retry budget | Stops a struggling Avis API being hammered by thousands of sessions retrying at once |
+| Charge sent inline from the terminal | Put commits on a **durable queue** (e.g. SQS) with idempotent workers and a dead-letter queue | Spikes get absorbed, nothing is lost on a crash, and unknown outcomes are re-checked automatically |
+| One-write guard in memory | **Per-reservation lock** in a shared store (e.g. DynamoDB conditional write or Redis) | Two sessions, or a session and a human, can't change one rental at once |
+| Chat state in process memory | **Stateless workers** with sessions in a shared store | Scale horizontally behind a load balancer and survive restarts |
+| Handoffs appended to a local file | Post to Avis's **live-agent queue** with the packet attached | A human picks it up in seconds, with the full context |
+| JSONL files on disk | **Log pipeline** (e.g. OpenTelemetry → warehouse) with retention and access control | Search across sessions, dashboards and alerts, and PII retention rules |
+| One model, one provider | **Fallback model or provider**, plus per-tenant rate limiting | One provider outage doesn't take the agent down |
+| Embeddings in memory, built at startup | A **vector index**, rebuilt when the KB changes | Thousands of articles, many languages, no startup cost |
+| Whole conversation sent each turn | **Conversation compaction** and prompt caching | Lower cost and latency on long chats |
+| Terminal input | Web/app chat with **streaming** replies | Replies feel instant; the card becomes a real UI component |
+
+### Adding Cancel
+
+It reuses the same shape:
 1. Write the procedure (48 h rule, refund vs. penalty, what's said when).
 2. `/quote` misprices cancels, so compute the penalty in code from the reservation and the KB rule, or hand off until
    Avis provides a cancel quote.
