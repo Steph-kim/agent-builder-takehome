@@ -53,6 +53,9 @@ CHARGED = (
 # they're logged (agent.msg "cites") and stripped from what's printed. Handles "[kb_a_01][kb_b_02]" and
 # "[kb_a_01, kb_b_02]".
 CITATION = re.compile(r"\s*\[(kb_[a-z]+_\d+(?:\s*,\s*kb_[a-z]+_\d+)*)\]")
+# Code-written, right after the receipt: the customer otherwise sits at a bare prompt. No price or date: those
+# are on the receipt above, and this line must never be a second, model-free source of them.
+ALL_SET = "You're all set — your extension is confirmed. Is there anything else I can help you with?"
 PAYMENT_INTRO = (
     "To confirm, enter the email on the booking, then the card's security code and billing ZIP. "
     "They go straight to Avis — the assistant never sees them."
@@ -161,6 +164,7 @@ def _confirm_pending(
             t.emit("agent.msg", text=note)
             history.append({"role": "assistant", "content": note})
             history.append({"role": "system", "content": CHARGED})
+            _note(history, write, t, ALL_SET)
         elif result.kind == "offer":
             _note(history, write, t, result.message)
     return None
