@@ -130,7 +130,7 @@ def customer_summary(packet: Handoff, fallback_lead: str = "") -> str:
     if packet.reservation_id:
         passed.append(f"reservation {packet.reservation_id}")
     if packet.note:
-        passed.append(f"what you need: {packet.note.rstrip('.')}")
+        passed.append("what you asked for")  # the note itself is for the representative, not read back
     if packet.quote and packet.quote.get("total") is not None:
         passed.append(f"the quote (${packet.quote['total']:.2f})")
     confirmation = (packet.extend or {}).get("confirmation_number")

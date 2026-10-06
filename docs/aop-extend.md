@@ -10,7 +10,7 @@ customer's "y", can make the charge.** A test asserts the reason codes below equ
 |---|---|
 | "extend", "keep the car longer", "I'm running late", "return it Friday instead" | This procedure. |
 | Policy question (grace period, late fee, fuel, one-way fee…) | Answer from the KB (§8). No identity needed. |
-| Cancel, change pickup/return location or time earlier, upgrade | Ask once for the reservation number, then hand off `unsupported_intent`. |
+| Cancel, change pickup/return location or time earlier, upgrade | Ask once for the reservation number, then hand off `unsupported_intent`. Only when clearly asked: a handoff ends the chat, so an unclear reply ("return") gets a clarifying question, never a guess. |
 | Mixed ("extend, and what's the cancel fee?") | Do the extend / answer from KB; hand off only the unsupported part. |
 
 Open with "How can I help?" — ask for nothing until the request needs it.
@@ -80,8 +80,9 @@ A handoff is a **warm transfer, never a dead end**. Two steps, kept apart:
 After a transfer the chat ends, like a real transfer, so a bot and a human never act on one reservation at
 once. Code builds the packet (reservation id, what the customer wanted, gates hit, quote if any, session log
 path). The model's note is scrubbed. In production this posts to Avis's queue / live-chat transfer; here it
-appends to `logs/handoffs.jsonl`. The CLI shows the customer what was passed on (reservation, what they
-wanted, quote if any) and that they won't need to repeat it.
+appends to `logs/handoffs.jsonl`. The CLI tells the customer what was passed on (reservation, what they
+asked for, quote if any) and that they won't need to repeat it. The model's note itself goes to the
+representative only: it's the model's summary, and read back to the customer it can state a guess as fact.
 
 **Who raises it:** *code* = a tool/gate returns it, the model can't skip it. *model* = the agent calls
 `handoff_to_human` when the conversation calls for it.

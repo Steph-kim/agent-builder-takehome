@@ -79,7 +79,9 @@ def test_transfer_prints_code_summary_and_ends_chat(tmp_path, monkeypatch):
     assert out[0] == "Agent: How can I help?"
     assert "— Connecting you with a representative —" in out[-1]
     assert "Connecting you." not in out  # the model's closing line is replaced, not printed
-    assert "person." in out[-1] and "person.." not in out[-1]
+    # the model's note goes to the representative, never read back: live, a guessed "early return" was
+    # shown to a customer who had asked to extend
+    assert "what you asked for" in out[-1] and "wants a person" not in out[-1]
     assert sum(e["event"] == "customer.msg" for e in events) == 2  # third line never read
     assert events[-1]["outcomes"] == ["handed_off:customer_requested"]
 
