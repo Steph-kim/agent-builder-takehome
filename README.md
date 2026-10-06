@@ -531,7 +531,7 @@ Session logs keep **allowlisted fields only**:
 | `llm.turn` | latency, tokens |
 | `tool.call` / `tool.result` | reservation fields reduced to an allowlist: no name, address, plate or card |
 | `api.request` | method, path, status, error code, latency, attempt, idempotency key |
-| `gate.decision` | gate, result, reason code |
+| `gate.decision` | gate, allowed, reason code, stage (check / commit) |
 | `approval` | total shown, decision |
 | `outcome` | the ordered outcome list |
 
