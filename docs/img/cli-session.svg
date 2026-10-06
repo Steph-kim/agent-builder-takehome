@@ -39,8 +39,8 @@
 <text x="24" y="742"><tspan fill="#8b7cff" font-weight="700">Agent:</tspan><tspan fill="#e4e4e7"> To confirm, enter the email on the booking, then the card&#x27;s security code and billing</tspan></text>
 <text x="24" y="761"><tspan fill="#e4e4e7">       ZIP. They go straight to Avis — the assistant never sees them.</tspan></text>
 <text x="24" y="780"><tspan fill="#e4e4e7" fill-opacity="0.55">Email on the booking: </tspan><tspan fill="#e4e4e7">priya.patel@example.com</tspan></text>
-<text x="24" y="799"><tspan fill="#e4e4e7" fill-opacity="0.55">Card security code (hidden): </tspan></text>
-<text x="24" y="818"><tspan fill="#e4e4e7" fill-opacity="0.55">Billing ZIP (hidden): </tspan></text>
+<text x="24" y="799"><tspan fill="#e4e4e7" fill-opacity="0.55">Card security code (hidden): </tspan><tspan fill="#e4e4e7">123</tspan></text>
+<text x="24" y="818"><tspan fill="#e4e4e7" fill-opacity="0.55">Billing ZIP (hidden): </tspan><tspan fill="#e4e4e7">94103</tspan></text>
 <text x="24" y="837"><tspan fill="#22c55e">╭─ </tspan><tspan fill="#22c55e" font-weight="700">Extension confirmed</tspan><tspan fill="#22c55e"> ──────────────────────────────────╮</tspan></text>
 <text x="24" y="856"><tspan fill="#22c55e">│</tspan><tspan fill="#e4e4e7"> </tspan><tspan fill="#e4e4e7" fill-opacity="0.55">Confirmation   </tspan><tspan fill="#e4e4e7" font-weight="700">EXT-770010-461</tspan><tspan fill="#e4e4e7">                          </tspan><tspan fill="#22c55e">│</tspan></text>
 <text x="24" y="875"><tspan fill="#22c55e">│</tspan><tspan fill="#e4e4e7"> </tspan><tspan fill="#e4e4e7" fill-opacity="0.55">New return     </tspan><tspan fill="#e4e4e7">Tuesday, October 6, 2026 at 6:00 PM PDT</tspan><tspan fill="#e4e4e7"> </tspan><tspan fill="#22c55e">│</tspan></text>

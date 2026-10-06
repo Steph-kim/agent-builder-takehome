@@ -105,7 +105,8 @@ Avis can audit.
 
 A real terminal session, captured from a live run of the current code (`gpt-5-mini`; the customer is the simulated
 one from the evals), shown as the terminal draws it. The wording is unedited, warts included: the agent mentions the
-card a moment before code prints it. Hidden prompts show nothing as you type. The session log is in
+card a moment before code prints it. The CVV and ZIP are shown so you can reuse them (any 3-digit code and 5-digit
+ZIP work); in the terminal those prompts are hidden and show nothing as you type. The session log is in
 [`docs/sample-logs/`](docs/sample-logs/).
 
 <p align="center"><img src="docs/img/cli-session.svg" alt="A terminal session: a late-fee question answered from the policy articles, then an extension to tomorrow at 6pm, a boxed confirmation card approved with y, hidden payment prompts, a green receipt box, and a closing 'anything else?' line" width="860"></p>
@@ -144,8 +145,8 @@ Approve this charge? (y/n): y
 Agent: To confirm, enter the email on the booking, then the card's security code and billing ZIP. They go straight
        to Avis — the assistant never sees them.
 Email on the booking: priya.patel@example.com
-Card security code (hidden):
-Billing ZIP (hidden):
+Card security code (hidden): 123
+Billing ZIP (hidden): 94103
 ╭─ Extension confirmed ──────────────────────────────────╮
 │ Confirmation   EXT-770010-461                          │
 │ New return     Tuesday, October 6, 2026 at 6:00 PM PDT │
