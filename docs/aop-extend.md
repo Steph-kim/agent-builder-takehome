@@ -60,7 +60,9 @@ value. The first gate that fails returns its reason code and the customer copy; 
 - Retries exhausted with no answer → hand off `outcome_unknown`. Tell the customer the change **may** have gone
   through and a representative will confirm it.
 - Email/CVV/ZIP rejected twice → `verification_failed`; payment declined → `payment_declined`. Either one
-  locks extensions for the rest of the chat (no guessing through new cards).
+  locks extensions for the rest of the chat (no guessing through new cards). After a second rejection the
+  customer hears: "Those details still didn't match our records, so I can't complete the extension here.
+  Nothing was charged. A representative can verify you another way — want me to connect you?"
 - Fail-closed: once the request may have reached Avis, anything other than a clear first-attempt refusal
   (crash, Ctrl-C, unreadable reply, a refusal after a timed-out attempt) is `outcome_unknown`. The idempotency
   key is logged before the request is sent; the handoff packet carries it with the approved and charged totals.

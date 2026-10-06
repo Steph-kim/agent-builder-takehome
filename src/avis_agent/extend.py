@@ -45,6 +45,12 @@ BAD_TIME = (
 TIME_PASSED = "That time has already passed at the return location. Ask the customer for a later time."
 NOT_VERIFIED = "Verify the reservation first (lookup_reservation)."
 DETAILS_RETRY = "Those details didn't match our records. Please enter them once more."
+# Second payment-details refusal. The lookup copy ("can't look it up") confused customers right after a
+# card (sims, 2026-10-06). A 403 is a definite refusal on the first send, so nothing was charged.
+DETAILS_FAILED = (
+    "Those details still didn't match our records, so I can't complete the extension here. Nothing was "
+    "charged. A representative can verify you another way — want me to connect you?"
+)
 PRICE_CHANGED = "The price changed since I showed it, so here is the updated total. Nothing has been charged."
 NOTHING_CHANGED = "No problem — nothing has been changed."
 
@@ -285,7 +291,8 @@ def _definite_failure(ctx: AgentContext, e: AvisAPIError, retry_allowed: bool) -
     else:
         reason = ReasonCode.INTERNAL_ERROR
     ctx.tracer.emit("gate.decision", gate="extend", allowed=False, reason_code=reason.value, stage="commit")
-    return CommitResult("offer", offer(ctx, reason)["message"])
+    message = offer(ctx, reason)["message"]
+    return CommitResult("offer", DETAILS_FAILED if reason is ReasonCode.VERIFICATION_FAILED else message)
 
 
 def _unknown(ctx: AgentContext, error: str) -> CommitResult:

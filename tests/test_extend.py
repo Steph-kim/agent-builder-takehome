@@ -13,7 +13,7 @@ import pytest
 from avis_agent import extend
 from avis_agent.client import AvisClient
 from avis_agent.config import Thresholds
-from avis_agent.extend import Payment, check, commit, render_card
+from avis_agent.extend import DETAILS_FAILED, Payment, check, commit, render_card
 from avis_agent.handoff import customer_summary, request_transfer
 from avis_agent.reasons import CUSTOMER_COPY, ReasonCode
 from avis_agent.tools import AgentContext
@@ -283,7 +283,8 @@ def test_wrong_details_get_one_retry_then_lock_extensions(make):
     assert commit(ctx, p, PAY, retry_allowed=True).kind == "retry"
     assert ctx.pending is p and ctx.write_state is None
     result = commit(ctx, p, PAY, retry_allowed=False)
-    assert result.kind == "offer" and result.message == CUSTOMER_COPY[ReasonCode.VERIFICATION_FAILED]
+    assert result.kind == "offer" and result.message == DETAILS_FAILED  # not the lookup copy
+    assert ctx.tracer.outcomes[-1] == "offered:verification_failed"
     keys = [r.headers["Idempotency-Key"] for r in ctx.fake.extend_bodies()]
     assert len(keys) == 2 and keys[0] != keys[1]
     # No guessing emails through a fresh card.
