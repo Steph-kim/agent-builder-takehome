@@ -48,6 +48,10 @@ Optional settings in `.env`:
 | "What's the grace period?" | 30 minutes, from the official article, **not** the legacy "2 hours" |
 | "Cancel my booking" | Asks once for the reservation number, then hands off as `unsupported_intent` |
 
+At the payment prompts, enter the booking's email from `BRIEF.md` (e.g. `sarah.johnson@example.com`) and any
+3-digit CVV and 5-digit ZIP (`123` / `90045` worked throughout testing). The mock API doesn't persist writes, so
+you can extend the same rental as often as you like.
+
 **Tests and evals:**
 
 ```bash
