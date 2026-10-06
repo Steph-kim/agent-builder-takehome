@@ -48,7 +48,7 @@ At the payment prompts, use the booking email from `BRIEF.md` and any 3-digit CV
 worked throughout testing). The mock API doesn't persist writes, so the same rental can be extended repeatedly.
 
 ```bash
-pytest -q                                   # offline unit suite (251 tests), no network
+pytest -q                                   # offline unit suite (252 tests), no network
 python -m evals.retrieval                   # KB retrieval: recall, authority precedence, off-topic rejection
 python -m evals.sim -k 3                    # live scenario sims (~30 min); exits 1 on any safety failure
 python -m evals.sim kb_gap messy_robert -v  # a subset, with transcripts
@@ -97,41 +97,62 @@ Avis can audit.
 
 ## Customer experience
 
-A real session from the final eval run (`gpt-5-mini`, simulated customer). The full log is in
-[`docs/sample-logs/`](docs/sample-logs/).
+A real terminal session, captured from a live run (`gpt-5-mini`; the customer is the simulated one from the evals).
+Long lines are wrapped and the wording is unedited. Hidden prompts show nothing as you type, as in a real terminal. The session log is in [`docs/sample-logs/`](docs/sample-logs/).
 
 ```text
-You:   hi, will I get charged a late fee if i'm late returning my car?
-Agent: ...Avis provides a 30-minute grace period before late charges begin [kb_ext_01]. The standard late-return
-       fee is $29 for non-Preferred members; Avis Preferred members are exempt [kb_fee_02]. If you already know
-       you'll be late, extending before your return time is usually cheaper...
-You:   ok can i extend my rental to tomorrow at 6pm then?
-Agent: I can help with that. Please send your reservation number and the last name on the booking...
-You:   reservation number is AVS-77001020 and last name is patel...
-Agent: To confirm: you want the new return to be Tuesday, October 6, 2026 at 6:00 PM local time at San Francisco
-       International Airport (SFO). Is that right?
+Agent: How can I help?
+You:   hi, will i get charged a late fee if i return my car late?
+Agent: Short answer: possibly.
+
+       - Avis provides a short grace period after your scheduled return before late charges start — 30 minutes
+         is the current policy.
+       - If you're past the grace period, standard customers may be charged a late return fee (plus any daily
+         charges that accrue); Avis Preferred members are exempt from the late-fee benefit.
+       - Extending the rental before your return time is usually cheaper than returning late.
+       - Returning when the location is closed can also trigger a separate after-hours fee.
+You:   ok thanks. can i extend my rental until tomorrow at 6pm instead?
+Agent: I can help — please send your reservation number (e.g., AVS-12345678) and the last name on the booking so
+       I can look it up.
+You:   sure! it's AVS-77001020 and the last name is patel.
+Agent: I found your reservation AVS-77001020. You'd like to extend the return to Tuesday, October 6, 2026 at
+       6:00 PM local (Tuesday, Oct 6 at 6:00 PM) — is that correct? If so I'll check availability and pricing.
 You:   yep, that's right!
-Agent: A confirmation card with the extension and price is showing now — please approve it there.
-       [code-rendered card → y → email, CVV, ZIP entered off-model]
-       Extension confirmed — Confirmation EXT-770010-294; New return Tuesday, October 6, 2026 at 6:00 PM PDT;
-       Charged $60.08 USD to the card on file.
-```
-
-"Tomorrow" was resolved in the return location's time zone, not the server's. The policy answer cites its sources.
-Identity was asked for only once the request needed it. The price and the confirmation come from code, never from
-the model. This is the card the customer approves (example values):
-
-```text
+(Checking availability…)
+Agent: A confirmation card with the price is now showing — please review and approve it there to complete the
+       extension.
 ──── Confirm your extension ────
-Reservation    AVS-29471835
-Return now     Tuesday, June 15, 2027 at 2:00 PM PDT
-New return     Thursday, June 17, 2027 at 2:00 PM PDT
-Extra days     2 × $45.99 = $91.98
-Taxes & fees   $8.51
-Total          $100.49 USD
-Charged to     Visa ending 4832
-Approve this charge? (y/n):
+Reservation    AVS-77001020
+Return now     Monday, October 5, 2026 at 9:24 PM PDT
+New return     Tuesday, October 6, 2026 at 6:00 PM PDT
+Extra days     1 × $54.99 = $54.99
+Taxes & fees   $5.09
+Total          $60.08 USD
+Charged to     Mastercard ending 2941
+Approve this charge? (y/n): y
+Agent: To confirm, enter the email on the booking, then the card's security code and billing ZIP. They go
+       straight to Avis — the assistant never sees them.
+Email on the booking: priya.patel@example.com
+Card security code (hidden):
+Billing ZIP (hidden):
+──── Extension confirmed ────
+Confirmation   EXT-770010-813
+New return     Tuesday, October 6, 2026 at 6:00 PM PDT
+Charged        $60.08 USD to the card on file
+You:   awesome, thanks!
+Agent: You're all set — the extension is confirmed (EXT-770010-813) for Tuesday, Oct 6, 2026 at 6:00 PM PDT.
+       Anything else I can do for you?
 ```
+
+What to notice:
+- **The card, the payment prompts and the receipt are printed by code, not the model.** Every number on the card
+  comes from the API's quote, and the receipt comes from the API's response. The CVV and ZIP are typed into hidden
+  prompts that go straight to the API call: they never reach the model, its history or the log.
+- **Time zones:** "tomorrow at 6pm" was resolved at the return location (SFO, Pacific time), not the server's zone,
+  and read back with the weekday before anything was checked.
+- **Identity was asked for only when it was needed.** The policy question needed none.
+- **The policy answer is grounded.** The model cites the articles it used (`[kb_ext_01]` …). Those ids are logged
+  for audit (`cites` on `agent.msg`) and stripped from what the customer sees.
 
 **Where I draw the line.** The agent never:
 - charges without a code-rendered card the customer approved with `y`;
@@ -317,9 +338,9 @@ Caveats:
 the shipped floor: **recall@4 17/17, authority precedence 6/6, off-topic rejection 5/5.** The margin is thin: the
 weakest correct match scored 0.48, the strongest off-topic one 0.42.
 
-**Unit tests (251, offline).** Client faults via `httpx.MockTransport` (503s, timeouts, 4xx, same key across
+**Unit tests (252, offline).** Client faults via `httpx.MockTransport` (503s, timeouts, 4xx, same key across
 retries, `OutcomeUnknown`); every gate on recorded fixtures of all 6 reservations under a frozen clock; time zones;
-the scrubber, including what it must *not* redact; no thresholds in the prompt; a model server that never answers;
+the scrubber, including what it must *not* redact; no thresholds in the prompt; citations logged but never printed; a model server that never answers;
 and an invariant over sequences of approve/decline decisions (what the model is told after each card).
 
 **Bugs the sims found, now fixed:**
@@ -434,7 +455,7 @@ Session logs keep **allowlisted fields only**:
 | Event | Fields |
 |---|---|
 | `session.start` | git sha, model, prompt hash, KB hash |
-| `customer.msg` / `agent.msg` | scrubbed text / text |
+| `customer.msg` / `agent.msg` | scrubbed text / text as shown, plus the KB ids it cited |
 | `llm.turn` | latency, tokens |
 | `tool.call` / `tool.result` | reservation fields reduced to an allowlist: no name, address, plate or card |
 | `api.request` | method, path, status, error code, latency, attempt, idempotency key |
