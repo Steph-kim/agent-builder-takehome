@@ -37,8 +37,15 @@ NO = frozenset({"", "n", "no"})
 # Model-only, after a card closes without a charge. The model's history still holds check_extension's
 # "ready", so without this it points the customer to a card that's gone (seen in sims, 2026-10-06).
 CARD_CLOSED = (
-    "The card was closed without a charge; no card is showing now. If the customer still wants that "
-    "change, call check_extension again — never point them to a card."
+    "The last card was closed without a charge, so never point the customer to it. If they still want that "
+    "change, call check_extension again; when it returns ready, the system shows them a new card."
+)
+# Model-only, after a commit. The receipt sits in history as an assistant line, which the prompt says not to
+# trust ("the system confirms it"), so without this the model asked a charged customer to approve the card.
+CHARGED = (
+    "The system charged the customer and confirmed this extension; the receipt above is from the API. The "
+    "change is made: no card is showing and nothing is left to approve, so never ask them to approve or "
+    "confirm anything for it."
 )
 PAYMENT_INTRO = (
     "To confirm, enter the email on the booking, then the card's security code and billing ZIP. "
@@ -147,6 +154,7 @@ def _confirm_pending(
             note = receipt_note(result.message)
             t.emit("agent.msg", text=note)
             history.append({"role": "assistant", "content": note})
+            history.append({"role": "system", "content": CHARGED})
         elif result.kind == "offer":
             _note(history, write, t, result.message)
     return None

@@ -12,7 +12,7 @@ import pytest
 
 from avis_agent import agent as agent_mod
 from avis_agent import cli
-from avis_agent.cli import CARD_CLOSED
+from avis_agent.cli import CARD_CLOSED, CHARGED
 from avis_agent.config import Settings
 from avis_agent.extend import NOTHING_CHANGED, CommitResult, PendingExtension, render_receipt
 from avis_agent.handoff import request_transfer, transfer
@@ -229,9 +229,11 @@ def test_a_declined_card_tells_the_model_it_is_gone(tmp_path, monkeypatch):
 
 @pytest.mark.parametrize("decisions", [["n"], ["n", "n"], ["y"], ["n", "y"], ["n", "n", "y"]])
 def test_card_closed_note_iff_the_last_card_closed_uncharged(tmp_path, monkeypatch, decisions):
-    """Invariant at the next model call: one CARD_CLOSED note if the last card was declined, none otherwise.
+    """Invariant at the next model call: one CARD_CLOSED note if the last card was declined, none otherwise,
+    and a CHARGED note right after every receipt.
     kills: the note left beside a later receipt (seen live: the model then denied a real charge);
-    kills: notes piling up across declines; kills: the note never added."""
+    kills: notes piling up across declines; kills: the note never added;
+    kills: a receipt the model doesn't trust (seen live after n → y: a charged customer told to approve)."""
     receipt = render_receipt(RESPONSE, pending())
     stub_commit(monkeypatch, *[CommitResult("resolved", receipt) for d in decisions if d == "y"])
     lines = []
@@ -248,6 +250,10 @@ def test_card_closed_note_iff_the_last_card_closed_uncharged(tmp_path, monkeypat
     )
     notes = sum(h.get("content") == CARD_CLOSED for h in histories[-1])
     assert notes == (1 if decisions[-1] == "n" else 0)
+    after = histories[-1]
+    receipts = [i for i, h in enumerate(after) if str(h.get("content", "")).startswith("Extension confirmed")]
+    assert len(receipts) == decisions.count("y")
+    assert all(after[i + 1] == {"role": "system", "content": CHARGED} for i in receipts)
 
 
 def test_other_text_at_the_card_is_a_no_scrubbed_and_answered_once(tmp_path, monkeypatch):
