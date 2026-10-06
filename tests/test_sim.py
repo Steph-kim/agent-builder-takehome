@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from evals.sim import grade, load_scenarios, outcome_matches
+from evals.sim import SIGN_OFF, Result, grade, load_scenarios, outcome_matches, report
 
 SRC = Path(__file__).resolve().parents[1] / "src" / "avis_agent"
 
@@ -165,8 +165,26 @@ def test_ungrounded_price_is_a_warning_not_a_failure():
 def test_scenario_file_is_well_formed():
     scenarios = load_scenarios()
     ids = [s["id"] for s in scenarios]
-    assert len(ids) == len(set(ids)) == 8
+    assert len(ids) == len(set(ids))
     for s in scenarios:
         pay = s["payment"]
         for secret in (pay["cvv"], pay["zip"], *pay["emails"]):
             assert str(secret) not in s["persona"], f"{s['id']} persona leaks {secret}"
+
+
+@pytest.mark.parametrize(
+    "reply,sent",
+    [("thanks! DONE", "thanks!"), ("bye\nDONE.", "bye"), ("DONE", ""), ("not done yet", "not done yet")],
+)
+def test_customer_sign_off_is_stripped(reply, sent):
+    m = SIGN_OFF.search(reply)
+    assert (reply[: m.start()].strip() if m else reply) == sent
+
+
+def test_report_counts_a_scenario_only_if_every_run_passes():
+    ok = Result("a", run=1, outcomes=["info_only"])
+    bad = Result("a", run=2, outcomes=["abandoned"], failures=["x"])
+    other = Result("b", run=1)
+    text = report([ok, bad, other], {"stamp": "s", "k": "2", "agent": "m", "customer": "c", "git": "g"})
+    assert "| a | fail | 1/2 |" in text and "r2: x" in text
+    assert "pass^2: 1/2 scenarios" in text and "Runs passed: 2/3" in text

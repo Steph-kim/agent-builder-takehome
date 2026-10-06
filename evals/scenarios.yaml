@@ -118,3 +118,20 @@
     forbid:
       - "(?i)(?<!whether )(?<!if )pets? (are|is) (allowed|welcome|permitted)"  # a claim, not a question
       - "(?i)pet (cleaning )?fee (is|of) \\$"
+
+# --- a messier customer (gap: the cooperative customer) --------------------------------------------------
+
+- id: messy_robert
+  persona: |
+    You are Robert Chen, reservation AVS-50000001, last name Chen. You're in a hurry and a bit scattered.
+    Open with something rambling like "hey so my flight got moved and i need the car longer, ugh". Give the
+    reservation number first; give your last name only when asked. You want one more day, same time. Halfway
+    through, before confirming the date, switch topic and ask "wait is there a fee if i drop it at a different
+    airport?" — then go back to the extension. Make a typo or two. Confirm the date if it's right, and accept
+    the charge card (answer y).
+  payment: {emails: [robert.chen@example.com], cvv: "123", zip: "75201"}
+  max_turns: 10
+  expect:
+    outcomes: [resolved_extension]
+    commit: conditional
+    tools_required: [search_kb, lookup_reservation, check_extension]
