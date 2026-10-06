@@ -28,7 +28,7 @@ from openai import AsyncOpenAI, OpenAI
 from avis_agent import cli
 from avis_agent.client import AvisClient
 from avis_agent.config import REPO_ROOT, Settings, load_settings
-from avis_agent.kb import KnowledgeBase, openai_embedder
+from avis_agent.kb import ARTICLES_PATH, KnowledgeBase, openai_embedder
 from avis_agent.trace import Tracer, git_sha
 from evals.faults import FaultyClient
 from evals.judge import CX, DEFAULT_JUDGE_MODEL, judge
@@ -36,7 +36,6 @@ from evals.judge import CX, DEFAULT_JUDGE_MODEL, judge
 SCENARIOS = Path(__file__).with_name("scenarios.yaml")
 RESULTS_DIR = Path(__file__).with_name("results")
 SIM_LOGS = REPO_ROOT / "logs" / "sims"
-KB_FILE = REPO_ROOT / "data" / "knowledge-base" / "articles.json"
 
 DONE = "DONE"
 CUSTOMER_RULES = (
@@ -390,7 +389,7 @@ async def main(argv: list[str]) -> int:
         openai_embedder(AsyncOpenAI(api_key=settings.openai_api_key), settings.embed_model)
     )
     customer_client = OpenAI(api_key=settings.openai_api_key)
-    kb_text = KB_FILE.read_text() if KB_FILE.exists() else ""
+    kb_text = ARTICLES_PATH.read_text() if ARTICLES_PATH.exists() else ""
     stamp = datetime.now().strftime("%Y%m%dT%H%M%S")
     log_dir = SIM_LOGS / stamp
     meta = {

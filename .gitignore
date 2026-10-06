@@ -3,7 +3,9 @@ __pycache__/
 *.py[cod]
 .venv/
 venv/
-.venv-test/
+.pytest_cache/
+.ruff_cache/
+.claude/
 
 # Secrets — candidates fill this in from env.example
 .env

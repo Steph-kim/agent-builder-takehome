@@ -8,8 +8,8 @@ from pathlib import Path
 import pytest
 from agents.tool_context import ToolContext
 
-from avis_agent.config import Thresholds
-from avis_agent.handoff import customer_summary, offer, request_transfer, transfer
+from avis_agent.config import REPO_ROOT, Thresholds
+from avis_agent.handoff import _display_path, customer_summary, offer, request_transfer, transfer
 from avis_agent.reasons import CUSTOMER_COPY, ReasonCode
 from avis_agent.tools import AgentContext, handoff_to_human, lookup
 from avis_agent.trace import Tracer
@@ -93,6 +93,20 @@ def test_packet_carries_ids_not_pii(ctx):
     packet = filed(ctx)[0]
     assert packet["reservation_id"] == "AVS-29471835" and packet["session_id"] == "s1"
     assert packet["log_path"].endswith("s1.jsonl")
+
+
+@pytest.mark.parametrize(
+    "rel", ["logs/sessions/x.jsonl", "logs/sims/20261006T000000/kb_gap-r1.jsonl", "a.jsonl"]
+)
+def test_packet_log_path_is_repo_relative(rel):
+    # kills: absolute path kept (leaks the home directory); prefix stripped wrongly (e.g. a leading "/")
+    shown = _display_path(REPO_ROOT / rel)
+    assert not shown.startswith("/") and REPO_ROOT / shown == REPO_ROOT / rel
+
+
+def test_packet_log_path_outside_repo_is_unchanged(tmp_path):
+    # kills: relative_to's ValueError escaping (a handoff that can't be filed) or a mangled path
+    assert _display_path(tmp_path / "s1.jsonl") == str(tmp_path / "s1.jsonl")
 
 
 def test_second_transfer_keeps_the_first(ctx):

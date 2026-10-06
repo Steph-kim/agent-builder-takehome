@@ -18,8 +18,8 @@ Open with "How can I help?" — ask for nothing until the request needs it.
 ## 2. Identify and verify
 1. Ask for the **reservation number and last name**. Code compares the last name to the reservation; until it
    matches, the agent sees nothing about the rental.
-2. Any failure (unknown id, wrong name) gets the same message: *"I couldn't verify that reservation — please
-   check the number and last name."* Never say which field was wrong.
+2. Any failure (unknown id, wrong name) gets the same message: *"I couldn't verify a reservation with those
+   details. Please check the reservation number and the last name on the booking."* Never say which field was wrong.
 3. Five failed lookups in a session → hand off `verification_failed`.
 4. After verification the agent may discuss dates, pickup/return location and vehicle class. Not the plate,
    address or full name. Card last-4 appears only on the confirmation card.
@@ -52,7 +52,7 @@ value. The first gate that fails returns its reason code and the customer copy; 
    instead of charging — once; a second change in a row is offered to a representative (`internal_error`).
 5. A rejected card leaves the conversation open. The customer can pick another date (new quote, new card).
 
-## 6. Commit and receipt (`commit_extension`)
+## 6. Commit and receipt (terminal `commit`)
 - One extend write per reservation per session. The terminal prints the confirmation number, new return time
   and amount charged **from the API response**.
 - Response ≠ approved card → hand off `confirmation_mismatch`. Tell the customer the change **was submitted

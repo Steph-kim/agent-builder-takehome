@@ -1,9 +1,8 @@
-# Pinned (Python 3.12). openai-agents must be new enough for tool needs_approval / RunState.
+# Pinned (Python 3.12).
 openai-agents==0.23.1
 openai==3.24.0
 
 python-dotenv==1.2.4
-requests==2.34.2
 httpx==0.28.1
 
 # RAG: roll-our-own cosine similarity over OpenAI embeddings

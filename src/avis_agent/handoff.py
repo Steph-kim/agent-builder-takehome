@@ -29,7 +29,8 @@ NOTE_MAX = 300
 
 @dataclass
 class Handoff:
-    """The packet a representative receives. No name, email, address or card — the rep looks those up."""
+    """The packet a representative receives. Code adds no name, email, address or card (the rep looks those
+    up); the model's `note` is scrubbed of contact and card details but may still mention a surname."""
 
     reason_code: str
     session_id: str
@@ -42,6 +43,14 @@ class Handoff:
     # After an extend write: idempotency key, approved vs charged total, confirmation number (for on-call).
     extend: dict | None = None
     ts: str = field(default_factory=lambda: datetime.now(UTC).isoformat(timespec="seconds"))
+
+
+def _display_path(path: Path) -> str:
+    """Repo-relative, so packets don't carry a home directory and still resolve on another machine."""
+    try:
+        return str(path.relative_to(REPO_ROOT))
+    except ValueError:
+        return str(path)
 
 
 def offer(ctx: AgentContext, reason: ReasonCode) -> dict[str, Any]:
@@ -91,7 +100,7 @@ def transfer(ctx: AgentContext, reason: ReasonCode, note: str, *, model_reason: 
         note=scrub(note.strip()).text[:NOTE_MAX] if note else "",
         gates_hit=list(ctx.gates_hit),
         quote=ctx.quote,
-        log_path=str(ctx.tracer.path),
+        log_path=_display_path(ctx.tracer.path),
         model_reason=model_reason,
         extend=dict(ctx.last_write) if ctx.last_write else None,
     )

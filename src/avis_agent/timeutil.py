@@ -2,7 +2,7 @@
 
 The model only ever emits local wall-clock times ("YYYY-MM-DDTHH:MM"); code attaches
 the zone of the return location. The API sometimes emits datetimes in UTC (seen live
-on AVS-77001020), so everything shown to a customer is converted to the location's
+on a test reservation), so everything shown to a customer is converted to the location's
 zone first, with the weekday spelled out so a wrong "Friday" is visible.
 """
 

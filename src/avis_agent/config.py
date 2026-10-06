@@ -36,10 +36,9 @@ class Settings:
     avis_api_key: str
     openai_api_key: str
     model: str = "gpt-5-mini"
-    sim_model: str = "gpt-5-mini"
     embed_model: str = "text-embedding-3-small"
     reasoning_effort: str | None = None
-    # Empty = no market restriction. Demo default is the US pilot (see README assumptions).
+    # Empty = no market restriction, so the test accounts work (see README assumptions).
     pilot_locations: frozenset[str] = frozenset()
     thresholds: Thresholds = field(default_factory=Thresholds)
 
@@ -58,7 +57,6 @@ def load_settings(env_file: Path | None = None) -> Settings:
         avis_api_key=os.environ["AVIS_API_KEY"],
         openai_api_key=os.environ["OPENAI_API_KEY"],
         model=os.environ.get("AVIS_MODEL") or Settings.model,
-        sim_model=os.environ.get("AVIS_SIM_MODEL") or Settings.sim_model,
         embed_model=os.environ.get("AVIS_EMBED_MODEL") or Settings.embed_model,
         reasoning_effort=os.environ.get("AVIS_REASONING_EFFORT") or None,
         pilot_locations=frozenset(c.strip().upper() for c in pilot.split(",") if c.strip()),

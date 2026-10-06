@@ -3,7 +3,7 @@ SDK wrapper that traces the call.
 
 Lookup (D5): the model sees nothing about a reservation until code has matched the last name.
 Wrong name, unknown id and malformed id all return the same generic result, so the reply never
-says which field was wrong. Hitting `Thresholds.max_failed_lookups` (5) locks lookup for the session
+says which field was wrong. Hitting `Thresholds.max_failed_lookups` locks lookup for the session
 and *offers* a handoff (handoff.py) — the customer can keep asking policy questions.
 """
 
