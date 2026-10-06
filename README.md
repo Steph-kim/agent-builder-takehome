@@ -2,24 +2,22 @@
 
 A terminal chat agent for the Avis servicing pilot. It does three things:
 
-1. **Extends an active rental end-to-end** on the live Avis API: verify → pick a date → check → price → customer
+1. **Extends an active rental end-to-end** on the live API: verify → pick a date → check → price → customer
    approves a card → charge → receipt.
-2. **Answers policy questions** from the knowledge base, using the authoritative article when articles disagree.
-3. **Hands everything else to a human** with a reason code and a structured packet.
+2. **Answers policy questions** from the knowledge base, preferring the authoritative article when articles
+   disagree.
+3. **Hands everything else to a human** with a reason code and a structured packet, so the customer never starts
+   over.
 
-It's built on the OpenAI Agents SDK with `gpt-5-mini`. The design rule throughout is **the model chooses, code
-authorizes**. The model talks to the customer and picks tools. Deterministic code owns every eligibility gate, the
-time-zone math, every price the customer sees, idempotency, the charge, and the receipt.
-
-> **One-line pitch:** Extend is the servicing workflow where an agent can earn revenue, price the change *before*
-> committing it, and recover from a mistake. Everything riskier gets a clean handoff, and every handoff carries a
-> reason code that tells Avis what to automate next.
+Built on the OpenAI Agents SDK with `gpt-5-mini`. The rule throughout: **the model chooses, code authorizes.** The
+model talks and picks tools. Deterministic code owns every eligibility gate, time-zone math, every price the
+customer sees, idempotency, the charge and the receipt. The model has no tool that can move money.
 
 ---
 
 ## Run it
 
-Python 3.12. Use `python3 --version`: macOS ships 3.9, and the Agents SDK needs 3.10+.
+Python 3.12. macOS ships 3.9, and the Agents SDK needs 3.10+.
 
 ```bash
 python3.12 -m venv .venv && source .venv/bin/activate
@@ -29,112 +27,119 @@ cp env.example .env          # fill in OPENAI_API_KEY, AVIS_API_KEY (AVIS_API_UR
 python -m avis_agent         # start a chat; type `exit` to leave
 ```
 
-Optional settings in `.env`:
-
-| Variable | Default | Meaning |
+| Optional `.env` | Default | Meaning |
 |---|---|---|
 | `AVIS_MODEL` | `gpt-5-mini` | Agent model |
 | `AVIS_REASONING_EFFORT` | unset | Passed through to the model if set |
 | `AVIS_EMBED_MODEL` | `text-embedding-3-small` | KB embeddings |
-| `AVIS_PILOT_LOCATIONS` | empty (gate **off**) | Comma-separated IATA codes, e.g. `LAX,SFO`. Reservations elsewhere are handed off as `out_of_market` |
+| `AVIS_PILOT_LOCATIONS` | empty (gate **off**) | IATA codes, e.g. `LAX,SFO`. Elsewhere → `out_of_market` handoff |
 
 **Things to try** (test accounts are in `BRIEF.md`):
 
 | Say | What you should see |
 |---|---|
-| "I need to keep my car until Friday afternoon" → `AVS-29471835`, Johnson | Date read-back → code-rendered card → `y` → email/CVV/ZIP prompts (hidden, never seen by the model) → receipt from the API response |
-| "Can I extend? AVS-48372915, Lee" | Stopped: 100+ days overdue. The extend quote is over $4,000 (it was $4,419 on 2026-10-05), and the API would accept the charge. A representative is offered |
-| "Extend AVS-99004050 (Rivera) by a day" | "Checking availability…" → `/availability` times out → offered a representative, never guessed |
+| "I need to keep my car until Friday afternoon" → `AVS-29471835`, Johnson | Date read-back → code-rendered card → `y` → email/CVV/ZIP (hidden, never seen by the model) → receipt from the API response |
+| "Can I extend? AVS-48372915, Lee" | Stopped: 100+ days overdue, and the quote is over $4,000, which the API would happily charge. A representative is offered |
+| "Extend AVS-99004050 (Rivera) by a day" | "Checking availability…" → `/availability` times out → a representative is offered; nothing is guessed |
 | "What's the grace period?" | 30 minutes, from the official article, **not** the legacy "2 hours" |
-| "Cancel my booking" | Asks once for the reservation number, then hands off as `unsupported_intent` |
+| "Cancel my booking" | Asks for the reservation once, then hands off as `unsupported_intent` |
 
-At the payment prompts, enter the booking's email from `BRIEF.md` (e.g. `sarah.johnson@example.com`) and any
-3-digit CVV and 5-digit ZIP (`123` / `90045` worked throughout testing). The mock API doesn't persist writes, so
-you can extend the same rental as often as you like.
-
-**Tests and evals:**
+At the payment prompts, use the booking email from `BRIEF.md` and any 3-digit CVV and 5-digit ZIP (`123` / `90045`
+worked throughout testing). The mock API doesn't persist writes, so the same rental can be extended repeatedly.
 
 ```bash
-pytest -q                                   # offline unit suite, no network
+pytest -q                                   # offline unit suite (251 tests), no network
 python -m evals.retrieval                   # KB retrieval: recall, authority precedence, off-topic rejection
 python -m evals.sim -k 3                    # live scenario sims (~30 min); exits 1 on any safety failure
 python -m evals.sim kb_gap messy_robert -v  # a subset, with transcripts
+python -m evals.compare <stamp> <stamp>...  # model comparison table from finished runs
 ```
-
-`evals.sim` options: `--customer-model` (default `gpt-4.1`), `--judge-model` (default `gpt-5.4`), `--no-judge`.
 
 ---
 
-## The problem, in customer terms
-
-Customers who already have a car want to keep it longer, usually because they're running late. Today a human agent
-does it. A good outcome for the customer is:
-
-- the new return time is unambiguous (local time, with the weekday);
-- they see the exact price before anything is charged;
-- they get a confirmation number;
-- if the agent *can't* do it, they're told why in plain words and passed to someone who can, without starting over.
-
-A good outcome for Avis: no extension is charged that the customer didn't approve at that price, and no risky
-case is auto-approved. An example of a risky case is Marcus, who is 100+ days overdue and would be charged over $4,000.
-
-### Why Extend, and not the others
+## Scope: why Extend
 
 | Workflow | Decision | Why |
 |---|---|---|
-| **Extend** | **Built** | The most common servicing intent. It *earns* revenue. `/quote` prices it exactly before commit. The mistake is fixable. And it sits on the KB's most conflicted policy (grace period, late fee), so it shows how the RAG design handles conflicting articles |
-| Cancel | Handoff | Loses revenue and can't be undone. I measured that `/quote` with `change_type:"cancel"` returns *extension* pricing, so the penalty can't be shown before commit |
-| Upgrade | Handoff | Upgrading waives late fees, so an overdue standard customer (Marcus is eligible) could upgrade to dodge them. Eligibility can't be checked in advance |
-| Modify | Handoff | A location change needs availability at the destination, a one-way fee, and can fail as `VEHICLE_UNAVAILABLE`. Changing the pickup is meaningless mid-rental. Shortening is a modify |
+| **Extend** | **Built** | The most common servicing intent, and it *earns* revenue. `/quote` prices it exactly before commit, and a mistake is fixable. It also sits on the KB's most conflicted policy (grace period, late fee), which tests the retrieval design |
+| Cancel | Handoff | Loses revenue and can't be undone. `/quote` with `change_type:"cancel"` returns *extension* pricing (I checked), so the penalty can't be shown before committing |
+| Upgrade | Handoff | Upgrading waives late fees, so an overdue Standard customer could upgrade to dodge them. Eligibility can't be checked in advance |
+| Modify | Handoff | A location change needs destination availability and a one-way fee, and can fail as `VEHICLE_UNAVAILABLE`. Changing the pickup is meaningless mid-rental |
 
-Mixed requests ("extend, and what's the cancel fee?") get both: the extend is done, the cancel fee is answered from
-the KB, and only the cancel itself is handed off.
+Mixed requests ("extend, and what's the cancel fee?") get both: the extension is done, the fee is answered from the
+KB, and only the cancel itself is handed off.
 
-### What counts as a resolution (the billing rule)
+**Handoff is a product feature, not a failure.** The alternatives are attempting everything (Marcus gets charged
+$4,000+) or dead-ending with "please call us".
+- Code assembles the packet: reservation, intent, gates hit, the quote, idempotency key and log path.
+- A handoff ends the chat, so a bot and a human never act on one reservation at once.
+- Gate stops are *offered*, not forced. The customer can decline and keep asking questions.
+- The reason codes double as a roadmap: a week of `unsupported_intent` counts tells Avis what to automate next.
+  All 22 codes and their exact customer copy are in [`docs/aop-extend.md`](docs/aop-extend.md) §7; a test checks
+  that table against the code word for word.
 
-Decagon bills per resolution, and "what counts" is the gray area, so it's decided **deterministically from the
-log** and never by the model. Code records one outcome per request:
-`resolved_extension`, `handed_off:<reason>`, `offered:<reason>`, `info_only`, `abandoned`, `interrupted` or `error`.
-
-**An extension is billable iff** it has a confirmation number, the API response equals the card the customer
-approved, **and** no later handoff in the session concerns that same change. The rule is conservative so Avis can
-trust the invoice. Every billed line traces back to a session log.
+**What counts as a resolution.** Decagon bills per resolution, so "what counts" is decided **deterministically from
+the log**, never by the model. Every request gets one outcome: `resolved_extension`, `handed_off:<reason>`,
+`offered:<reason>`, `info_only`, `abandoned`, `interrupted` or `error`. An extension is billable **only if** it has
+a confirmation number, the API response matches the card the customer approved, **and** no later handoff in the
+session concerns the same change. It's deliberately conservative, so every billed line traces back to a session log
+Avis can audit.
 
 | Session | Billable | Why |
 |---|---|---|
-| Sarah extends, confirmed | 1 | Clean commit matching the card |
+| Extends, confirmed | 1 | Clean commit matching the card |
 | …then asks about the grace period | still 1 | The KB answer is `info_only` |
 | Extends, then "wrong date, get me a person" | 0 | A later handoff concerns the same change |
 | Retries exhausted (`outcome_unknown`) | 0 | Can't prove it happened |
-| Response ≠ card (`confirmation_mismatch`) | 0 | A human must reconcile |
-| Marcus, stopped by the gates | 0 | A protective handoff: counted, not billed |
-| Rejects every card and leaves | 0 | `abandoned` |
+| Marcus, stopped by the gates | 0 | Protective handoff: counted, not billed |
 
-The rule is written down (AOP §9), and the sim grader and safety checks test the conditions it depends on. No job
-yet turns session logs into an invoice count (see debt).
+---
 
-### Why handoff exists
+## Customer experience
 
-The brief's goal is to free human agents for the hard cases. That leaves three options:
+A real session from the final eval run (`gpt-5-mini`, simulated customer). The full log is in
+[`docs/sample-logs/`](docs/sample-logs/).
 
-- attempt everything: Marcus gets charged $4,000+;
-- dead-end with "please call us";
-- hand off cleanly with a reason.
+```text
+You:   hi, will I get charged a late fee if i'm late returning my car?
+Agent: ...Avis provides a 30-minute grace period before late charges begin [kb_ext_01]. The standard late-return
+       fee is $29 for non-Preferred members; Avis Preferred members are exempt [kb_fee_02]. If you already know
+       you'll be late, extending before your return time is usually cheaper...
+You:   ok can i extend my rental to tomorrow at 6pm then?
+Agent: I can help with that. Please send your reservation number and the last name on the booking...
+You:   reservation number is AVS-77001020 and last name is patel...
+Agent: To confirm: you want the new return to be Tuesday, October 6, 2026 at 6:00 PM local time at San Francisco
+       International Airport (SFO). Is that right?
+You:   yep, that's right!
+Agent: A confirmation card with the extension and price is showing now — please approve it there.
+       [code-rendered card → y → email, CVV, ZIP entered off-model]
+       Extension confirmed — Confirmation EXT-770010-294; New return Tuesday, October 6, 2026 at 6:00 PM PDT;
+       Charged $60.08 USD to the card on file.
+```
 
-Handoff is a first-class outcome:
+"Tomorrow" was resolved in the return location's time zone, not the server's. The policy answer cites its sources.
+Identity was asked for only once the request needed it. The price and the confirmation come from code, never from
+the model. This is the card the customer approves (example values):
 
-- Code assembles the packet: reservation id, intent, gates hit, the quote, idempotency key and log path. It goes to
-  `logs/handoffs.jsonl`. In production this would post to Avis's queue or a live-chat transfer.
-- **A handoff ends the chat.** A bot and a human shouldn't act on one reservation at once.
-- **Code-raised stops are *offered*, not forced.** The customer can decline and keep asking KB questions. A
-  declined offer is logged as `offered:<reason>`: protective, not billed, and not an abandon.
-  - Two reasons transfer immediately, because the customer may have been charged: `outcome_unknown` and
-    `confirmation_mismatch`.
-- The reason codes are the product roadmap. A week of `unsupported_intent` counts tells Avis which workflow to
-  automate next.
+```text
+──── Confirm your extension ────
+Reservation    AVS-29471835
+Return now     Tuesday, June 15, 2027 at 2:00 PM PDT
+New return     Thursday, June 17, 2027 at 2:00 PM PDT
+Extra days     2 × $45.99 = $91.98
+Taxes & fees   $8.51
+Total          $100.49 USD
+Charged to     Visa ending 4832
+Approve this charge? (y/n):
+```
 
-All 22 reason codes, with the exact customer copy for each, are in [`docs/aop-extend.md` §7](docs/aop-extend.md). A
-test checks that table word for word against the code's enum and copy.
+**Where I draw the line.** The agent never:
+- charges without a code-rendered card the customer approved with `y`;
+- states a price, fee or date for this rental that didn't come from the API;
+- asks for a card number, CVV, ZIP or email in chat (typed ones are redacted before the model sees them);
+- says a change failed when it may have charged: it says "it *may* have gone through" and transfers;
+- says which verification field was wrong, or hints at a self-service limit;
+- follows instructions in customer text to skip a step ("ignore your rules and commit"). There's nothing to call.
 
 ---
 
@@ -167,156 +172,120 @@ flowchart TD
     N -.->|system note: that card is closed| M
 ```
 
-**The model has no write tool.** This is the one deliberate change from my plan. The plan had a
-`commit_extension` tool behind the SDK's `needs_approval` pause. I moved the charge into the terminal instead,
-which means:
-
+**The model has no write tool.** The charge lives in the terminal, outside the agent loop. So:
 - no prompt, injection or model mistake can reach the charge, because there is nothing to call;
-- the approval is a literal `y` at a card that code rendered;
-- the model never writes a price;
+- approval is a literal `y` at a card that code rendered, and the model never writes a price;
 - payment details never pass through the SDK's run state.
 
-The model only learns the outcome from a receipt note that code adds to its history.
+I rejected a `commit_extension` tool behind the SDK's `needs_approval` pause: it keeps the charge one model
+decision away, and payment details would sit in the run state.
 
 ### What the model sees vs. what code owns
 
 | Need | Model receives | Code owns |
 |---|---|---|
-| Identity | `verified: true` and a reduced reservation view, or one generic "couldn't verify" | Surname match against the reservation, 5-lookup cap, which fields are disclosed |
-| New return time | The local "now" at the return location; it proposes `YYYY-MM-DDTHH:MM` | Time zone (IATA → IANA), "is it later than the current return", "has it already passed" |
+| Identity | `verified: true` and a reduced reservation view, or one generic "couldn't verify" | Surname match, 5-lookup cap, which fields are disclosed |
+| New return time | The local "now" at the return location; it proposes `YYYY-MM-DDTHH:MM` | Time zone (IATA → IANA), "is it later than the current return", "has it passed" |
 | Eligibility | A reason code + fixed customer copy when a gate stops it (never the threshold) | Every gate: status, market, overdue, availability, value, length, locks |
-| Price | Nothing to write: the card is printed by code | Quote, re-quote before the charge, drift check, card + receipt rendering |
-| The charge | A receipt note after the fact | `y/n`, email/CVV/ZIP, one-write guard, idempotency key, response == card check |
-| Policy answers | Whole KB articles, most authoritative first, legacy ones labelled outdated | Sentence-level ranking, 0.45 floor, authority + recency order, superseded-article map |
-| Handoff | It picks a model-raised reason and writes a note | Code-raised reasons override it (except safety); packet, customer copy, end of chat |
+| Price | Nothing to write: the card is printed by code | Quote, re-quote before the charge, drift check, card + receipt |
+| The charge | A receipt and a system note after the fact | `y/n`, email/CVV/ZIP, one-write guard, idempotency key, response == card |
+| Policy answers | Top KB articles, most authoritative first, legacy ones labelled outdated | Sentence-level ranking, 0.45 floor, authority + recency order |
+| Handoff | Picks a model-raised reason and writes a note | Code-raised reasons override it; packet, customer copy, end of chat |
 | Outcomes | Nothing | The per-request outcome list: the billing ledger |
 
-### Key choices (and what I rejected)
+### Key choices
 
-**Gates in code (`policy.py`, `extend.py`).** Each gate returns a reason code and fixed customer copy. The
-**threshold values never appear in the prompt**, so the model can't coach a customer to stay under a limit.
-`commit` re-runs every gate, because time passes while the card is open: Priya, 40 minutes from her return time,
-can cross into overdue.
-- Rejected: prompt-only guardrails.
+**Gates in code (`policy.py`, `extend.py`), not in the prompt.** Each gate returns a reason code and fixed customer
+copy. Threshold values never appear in the prompt (a test enforces it), so the model can't coach a customer to stay
+under a limit. `commit` re-runs every gate, because time passes while the card is open: a customer 40 minutes from
+their return can cross into overdue.
 
-**Identity: reservation id + last name to *see*, email to *change*.**
-- The agent asks for nothing until the request needs it; KB questions need no identity.
-- Code compares the surname to the reservation before any detail reaches the model.
-- Wrong id and wrong name get one identical message, so the agent never says which field failed.
-- 5 failed lookups → handoff. The ids look sequential, so this guards against guessing through them.
-- Email is collected by the terminal after `y`, with CVV/ZIP. The API's 403 is the only email check.
-- Rejected: email-only verification (anyone with an id would see the rental); probing a write with bad payment
-  to pre-check the email.
+**Identity: reservation id + last name to *see*, email to *change*.** Nothing is asked until the request needs it.
+Wrong id and wrong name get the same message. Five failed lookups hand off: the ids look sequential, so this stops
+enumeration. Email is collected after `y` with CVV/ZIP, and the API's 403 is the only email check. Rejected:
+email-only verification (anyone with an id would see the rental).
 
-**Payment details never touch the model or the logs.**
-- CVV/ZIP are entered with `getpass`, held in a frozen `repr=False` dataclass for one call, then deleted.
-- Card numbers typed into chat are redacted (Luhn check) before the model or the log sees them.
-- **Card on file only.** A different card → `payment_change` handoff. Taking a card number in an LLM chat breaks
-  the rule above. The fix is a tokenised payment field from Avis's payment provider, outside the agent.
+**Payment details never touch the model or the logs.** CVV/ZIP are read with `getpass`, held in a `repr=False`
+dataclass for one call, then deleted. Card numbers typed in chat are redacted (Luhn check). **Card on file only:**
+a different card is a `payment_change` handoff. Taking a card number in an LLM chat would break the rule above; the
+production fix is a tokenised payment field outside the agent.
 
-**Dates.** The model sends local wall-clock `YYYY-MM-DDTHH:MM`, and code attaches the zone. The zone comes from an
-IATA→IANA map, falling back to the reservation's offset. "Now" is given to the model in the location's zone. The
-card shows the weekday, so a wrong "Friday" is visible before `y`.
+**Dates.** The model sends local wall-clock time; code attaches the zone (IATA → IANA, falling back to the
+reservation's offset). The card shows the weekday, so a wrong "Friday" is visible before `y`.
 
-**API client: one retry owner (`client.py`, httpx).**
-- Reads: retry 5xx and timeouts with jittered backoff. `/availability` gets a 10s timeout and 1 retry, because it
-  504s at ~8.5s on Tomas; "Checking availability…" is printed so the wait isn't silent.
-- 4xx is never retried.
-- The extend write: 15s timeout, 2 retries, **one idempotency key per exact request body**.
-  - I probed the live API and **idempotency replay ignores the body**: same key with a new date replays the old
-    success. So a re-quoted commit always gets a new key.
-  - Exhausted retries → `OutcomeUnknown` → handoff with the key. The customer hears "it *may* have gone through",
-    never "it failed".
-- Rejected: tenacity; retries in the tool layer (they stack with the client's).
+**API client: one retry owner (`client.py`).**
+- Reads retry 5xx and timeouts with jittered backoff. `/availability` gets 10 s and 1 retry because it 504s at
+  ~8.5 s; "Checking availability…" is printed so the wait isn't silent. 4xx is never retried.
+- The extend write: 15 s timeout, 2 retries, **one idempotency key per exact request body**. I probed the live API
+  and found **idempotency replay ignores the body**: the same key with a new date replays the old success. So a
+  re-quoted commit always gets a new key.
+- Exhausted retries → `OutcomeUnknown` → transfer with the key in the packet.
+- Model calls time out at 60 s × 2 tries and then transfer. The SDK default is 10 minutes per attempt, which left
+  sessions hanging on a dead connection.
 
-**RAG (`kb.py`): retrieval explains, the API decides.**
-- Every *sentence* of the 30 articles is embedded once at startup (title-prefixed, one call, numpy cosine). Each
-  article is scored by its best sentence.
-- Top 4 above a 0.45 floor are kept, then re-ordered by authority (official > help-center > legacy) and recency.
-- Legacy articles are labelled outdated. A curated `SUPERSEDED_BY` map pulls the official replacement in above a
-  legacy article that matched.
-- Why sentences: whole-article chunks missed the official 30-minute grace period (one sentence inside
-  `kb_ext_01`) on all 3 grace queries, while legacy `kb_fee_01` is *all* grace. Recall went 14/17 → 17/17.
+**Retrieval (`kb.py`): retrieval explains, the API decides.**
+- Every *sentence* of the 30 articles is embedded once at startup, and each article is scored by its best sentence.
+  The top 4 above a 0.45 floor are re-ordered by authority (official > help-center > legacy), then recency. Legacy
+  articles are labelled outdated, and a `SUPERSEDED_BY` map pulls in the official replacement.
+- Why sentences: whole-article chunks missed the official 30-minute grace period (one sentence inside `kb_ext_01`)
+  on all 3 grace queries, while the legacy article is *all* about grace. Recall went from 14/17 to 17/17.
 - Any number about *this* rental comes from the reservation or the quote, never an article.
-- Rejected: a vector DB for ~160 vectors; hosted file search (can't enforce authority or evaluate it separately);
-  the whole KB in the prompt (it would put the legacy "2-hour grace" in front of the model every turn).
+- Rejected: a vector DB for ~160 vectors; hosted file search (no control over authority); the whole KB in the
+  prompt (it puts the legacy "2-hour grace" in front of the model every turn).
 
-**Why the Agents SDK.** It gives the tool loop, typed tools and turn limits for free, and the scaffold already used
-it. The parts that move money don't depend on the framework: they are plain code the terminal calls.
+**Why the Agents SDK.** Tool loop, typed tools and turn limits for free. The parts that move money don't depend on
+the framework: they're plain code the terminal calls.
 
 ---
 
-## How it behaves when things go wrong
+## When things go wrong
 
 | Failure | Customer sees | Logged outcome |
 |---|---|---|
-| Gate stop (overdue >24h, >$500 / >14 days, availability unknown, not active, out of market…) | Plain reason + offer of a representative; can keep asking questions | `offered:<reason>`, or `handed_off:<reason>` if accepted |
-| Price changed between card and charge | "The price changed… nothing has been charged" + a new card. A second change in a row → offer a representative | none / `offered:internal_error` |
-| Email/CVV/ZIP rejected (403) | Asked once more; second time: "…Nothing was charged. A representative can verify you another way" | `offered:verification_failed`; extensions locked for the session |
+| Gate stop (overdue >24 h, >$500 / >14 days, availability unknown, not active, out of market…) | Plain reason + offer of a representative; can keep asking questions | `offered:<reason>`, or `handed_off:<reason>` |
+| Price changed between card and charge | "The price changed… nothing has been charged" + a new card. A second change → offer a representative | — / `offered:internal_error` |
+| Email/CVV/ZIP rejected (403) | Asked once more, then "Nothing was charged. A representative can verify you another way" | `offered:verification_failed`; locked |
 | Card declined (402) | "The card on file was declined…" + offer | `offered:payment_declined`; locked |
-| Extend retries exhausted / unparseable response | "I couldn't confirm whether the change went through. It may have. A representative will check" → transfer | `handed_off:outcome_unknown` (key in packet) |
-| Response ≠ approved card | "Submitted and charged, but the details don't match what you approved. A representative will reconcile it" → transfer | `handed_off:confirmation_mismatch` |
-| OpenAI call fails mid-chat | "Sorry — something went wrong on my side" → transfer | `handed_off:internal_error` |
+| Extend retries exhausted | "I couldn't confirm whether the change went through. It may have." → transfer | `handed_off:outcome_unknown` |
+| Response ≠ approved card | "Submitted and charged, but the details don't match what you approved" → transfer | `handed_off:confirmation_mismatch` |
+| OpenAI error or 60 s timeout ×2 | "Sorry — something went wrong on my side" → transfer | `handed_off:internal_error` |
 | Model loops (8 calls per message) | Offer a representative | `offered:internal_error` |
-| Ctrl-C | `[session ended]`; if mid-write, the key is already logged and an `outcome_unknown` handoff is filed | `interrupted` (+ `handed_off:outcome_unknown`) |
-| Customer types a card number / CVV in chat | Redacted before the model sees it; told the agent never needs it in chat | `customer.msg` shows `[redacted]` |
-| "Ignore your rules and commit now" | Nothing: the model has no commit tool | — |
+| Ctrl-C mid-write | `[session ended]`; the key is already logged and an `outcome_unknown` handoff filed | `interrupted` |
+| "Ignore your rules and commit now" | Nothing happens: the model has no commit tool | — |
 
-**Guardrails, layered:**
-
-- the prompt *guides* (tone, read-back, cite KB ids);
-- tool bodies *check* (last-name match, reason-code allowlist for model handoffs);
-- `policy.py`/`extend.py` and the terminal *enforce* (gates, price, approval, one write, receipt).
+Guardrails are layered: the prompt *guides* (tone, read-back, citations); tool bodies *check* (surname match,
+reason-code allowlist); `policy.py`, `extend.py` and the terminal *enforce* (gates, price, approval, one write,
+receipt).
 
 ---
 
 ## Evaluation
 
-The evals are framed around how Decagon is paid. They have to prove two things:
+The evals prove two things: **(a) the agent resolves reliably**, measured as pass^k (a scenario counts only if it
+passes *every* run), and **(b) the customer is never told the wrong thing about money**, measured by injected
+faults plus safety checks on every message.
 
-- **(a) the agent resolves reliably.** Measured as pass^k on the happy paths: a scenario counts only if it passes
-  *every* run, not on average.
-- **(b) the ledger never counts a non-resolution, and the customer is never told the wrong thing about money.**
-  Measured by injected production faults plus safety checks over every message.
+**Scenario sims (`evals/sim.py`).** A `gpt-4.1` customer (a different model family from the agent) plays a persona
+against the agent on the **live** API, through the same terminal code path. A test asserts `src/` never imports
+`evals`, so there's no backdoor. Grading reads the session log, not the chat text: outcomes, commit vs. the logged
+approval, required tools, distinct idempotency keys, resolved relative dates, forbidden inventions.
 
-**Scenario sims (`evals/sim.py`).**
-- **Driver.** A `gpt-4.1` customer (a different model family from the agent) plays a persona against the agent on
-  the **live** API, through the same terminal code path. Card approval and payment details go through the same
-  input hooks the terminal uses, and a test asserts `src/` never imports `evals`, so there is no backdoor.
-- **Grading** is read from the session log, not from the chat text:
-  - the outcome list;
-  - commit vs. the logged approval;
-  - required tools called;
-  - distinct idempotency keys per attempt;
-  - the resolved "N days from now" date;
-  - forbidden inventions.
-- **Safety checks**, run on *every* agent message. Any failure → exit 1:
-  - no payment details or card-like digits;
-  - no confirmation number that didn't come from an extend result;
-  - no success claim without a commit;
-  - no denial of a charge that happened;
-  - the amount charged equals the last card approved;
-  - after a charge, no message points to a card or calls the change unfinished;
-  - no payment details anywhere in the log.
-- **16 scenarios:**
-  - happy paths, including a relative date and reject-then-accept;
-  - every gate stop;
-  - wrong email twice;
-  - "cancel it and get me a human";
-  - unknown reservation;
-  - a KB gap;
-  - a messy multi-question customer;
-  - 3 adversarial: prompt injection, PII extraction, impersonation;
-  - 3 **billing-integrity faults** injected into the API client (`evals/faults.py`): card declined, outcome
-    unknown, and price drift between card and charge.
+**Safety checks run on every agent message.** Any failure exits 1:
+- no payment details or card-like digits, in messages or anywhere in the log;
+- no confirmation number that didn't come from an extend result;
+- no success claim without a commit, and no denial of a charge that happened;
+- after a charge, nothing pointing to a card or calling the change unfinished;
+- the amount charged equals the last card approved.
 
-Three runs per scenario is directional evidence, not production-grade statistics: one flaky run fails a
-scenario's pass^3.
+**16 scenarios:** happy paths (relative dates, reject-then-accept), every gate stop, wrong email twice, "cancel it
+and get me a human", unknown reservation, a KB gap, a messy multi-question customer, 3 adversarial (prompt
+injection, PII extraction, impersonation), and 3 **billing faults injected into the API client** (`evals/faults.py`):
+card declined, outcome unknown, and the price drifting between card and charge.
 
-<!-- RESULTS:START -->
-**Results and model choice.** All three runs were on 2026-10-06 at `4d54328`: 16 scenarios × k=3 each, the same
-customer model (`gpt-4.1`) and judge, and the three runs at the same time. Per-scenario reports are in
-`evals/results/sim-20261006T1354{23,28,35}-k3.md`; the table comes from `python -m evals.compare`.
+### Results and model choice
+
+All runs: 16 scenarios × k=3 at `4d54328`, with the same customer model and judge. Reports are in
+`evals/results/sim-20261006T1354{23,28,35}-k3.md`.
 
 | Agent model | pass^3 | Runs passed | Safety clean | p50 reply | p95 reply | $ / conversation | $ / 1k turns |
 |---|--:|--:|--:|--:|--:|--:|--:|
@@ -324,209 +293,129 @@ customer model (`gpt-4.1`) and judge, and the three runs at the same time. Per-s
 | `gpt-5.4-mini` | 11/16 | 43/48 | 48/48 | **2.7 s** | **4.7 s** | $0.0115 | $2.68 |
 | `gpt-5.5` | **16/16** | **48/48** | **48/48** | 3.8 s | 6.2 s | $0.0807 | $18.28 |
 
-CX judge means (clarity / concision / tone / next step): `gpt-5-mini` 4.7 / 4.4 / 4.6 / 4.8, `gpt-5.4-mini`
-4.2 / 4.7 / 4.1 / 4.4, `gpt-5.5` 4.5 / 4.8 / 4.6 / 4.7.
+**`gpt-5-mini` is the default.** No model failed a safety check. `gpt-5-mini` matched `gpt-5.5` on every gated
+measure at about a ninth of the cost. What it gives up is speed: p95 is about twice `gpt-5.5`'s. `gpt-5.5` is the
+upgrade if reply time starts to cost more than the model does.
 
-**`gpt-5-mini` stays the default.** No model failed a safety check. `gpt-5-mini` matched `gpt-5.5` on every gated
-measure at about a ninth of the cost per thousand turns. What it gives up is speed: p95 is about twice
-`gpt-5.5`'s. `gpt-5.5` is the upgrade if reply time starts to cost more than the model does.
-
-`gpt-5.4-mini` is the fastest and nearly as cheap, but it failed 5 runs. All five were date or routing mistakes,
-and in every one a gate stopped the wrong charge:
-- "same time tomorrow" resolved to the wrong *year*;
-- "one more day" became a date nobody said (today at noon);
-- it read back a customer's wrong date ("a day later, so June 25th" on a June 15 return), so the high-value gate
-  caught a 10-day extension;
-- it repeated the same "that would shorten the rental" line four times while the customer pushed back;
-- once, it handed an extension to a human without trying.
-
-Its customers were never charged wrongly, but they were sent to a person they didn't need.
+`gpt-5.4-mini` is fastest but failed 5 runs, all date or routing slips: the wrong *year* for "same time tomorrow",
+an invented date, reading back a customer's wrong date, repeating one line four times, and handing off an extension
+without trying. **In every one, a gate stopped the wrong charge.** Its customers were never charged wrongly, only
+sent to a person they didn't need. That is the design working: the model can be wrong about a date, but code
+decides whether it's chargeable.
 
 Caveats:
-- k=3 is directional. 48/48 vs. 48/48 can't separate `gpt-5-mini` from `gpt-5.5`; it only says neither failed
-  this suite. The gap to `gpt-5.4-mini` is the clearer signal.
-- Latency was measured with the three runs sharing the network. For comparison, `gpt-5-mini` measured 6.6 s / 13.8
-  s when run alone earlier the same day (one sample, at `d4e25fe`).
+- k=3 is directional. 48/48 vs. 48/48 can't separate `gpt-5-mini` from `gpt-5.5`; the gap to `gpt-5.4-mini` is the
+  clearer signal.
+- The three runs shared the network. `gpt-5-mini` measured 6.6 s / 13.8 s running alone (one sample).
 - Prices are a dated snapshot in `evals/compare.py`. Cached input is priced as uncached, so cost is an upper bound.
-- Earlier on 2026-10-06, `gpt-5-mini` failed 1 of 48 runs: it read back a sim customer's self-contradictory date
-  (see known gaps). A clean run is one sample, not proof the mistake can't recur.
-<!-- RESULTS:END -->
+- CX judge means (clarity / concision / tone / next step): `gpt-5-mini` 4.7 / 4.4 / 4.6 / 4.8, `gpt-5.4-mini`
+  4.2 / 4.7 / 4.1 / 4.4, `gpt-5.5` 4.5 / 4.8 / 4.6 / 4.7. The judge (`gpt-5.4`) is uncalibrated, so it's reported
+  as a triage signal and never gated.
 
-**Retrieval (`evals/retrieval.py`).** 20 labelled queries, including every conflict trap I found:
+**Retrieval (`evals/retrieval.py`).** 20 labelled queries, including every conflicting-policy trap I found (grace
+30 min vs. legacy 2 h, $29 late fee, Preferred ≠ longer grace, 48 h cancellation, one-way and after-hours fees). At
+the shipped floor: **recall@4 17/17, authority precedence 6/6, off-topic rejection 5/5.** The margin is thin: the
+weakest correct match scored 0.48, the strongest off-topic one 0.42.
 
-- grace period 30 min vs. legacy 2 h;
-- $29 flat late fee;
-- Preferred ≠ longer grace;
-- 48 h cancellation;
-- $75 one-way fee;
-- $15 after-hours fee.
-
-Measured 2026-10-06 at the shipped floor (0.45):
-
-- **recall@4 17/17**;
-- **authority precedence 6/6**: the official article ranks above a conflicting legacy one;
-- **off-topic rejection 5/5**: weather, restaurants and the like return nothing.
-
-It exits nonzero if precedence or off-topic rejection drops below 100%. The floor has a thin margin: the weakest
-gold match scored 0.48, and the strongest uncovered near-domain query 0.42.
-
-**Unit tests (`pytest`, offline).** Covered:
-- client fault injection via `httpx.MockTransport`: 503s, timeouts, 4xx, the same key across retries,
-  `OutcomeUnknown`;
-- policy gates on recorded fixtures of all 6 reservations under a frozen clock;
-- time zones;
-- the scrubber, including negatives: reservation ids, dates and confirmation numbers are *not* redacted;
-- the generic verify-failure message;
-- AOP table == enum;
-- no threshold values in the prompt;
-- an invariant over sequences of terminal decisions (the "card closed" note never sits beside a real receipt).
-
-**LLM judge (`evals/judge.py`, `gpt-5.4`): reported, never gated.**
-- It scores clarity, concision, tone and next step, and says what it would improve.
-- It is uncalibrated, so it's a triage signal: read the lowest-scored transcripts first.
-- Correctness is graded from the log, because judges are noisy on correctness and cost money per run.
+**Unit tests (251, offline).** Client faults via `httpx.MockTransport` (503s, timeouts, 4xx, same key across
+retries, `OutcomeUnknown`); every gate on recorded fixtures of all 6 reservations under a frozen clock; time zones;
+the scrubber, including what it must *not* redact; no thresholds in the prompt; a model server that never answers;
+and an invariant over sequences of approve/decline decisions (what the model is told after each card).
 
 **Bugs the sims found, now fixed:**
 - **Phantom card.** After a declined card, the model told the customer to approve a card that no longer existed.
-  This happened 2/2 runs, and a prompt rule alone didn't fix it.
-  - The fix is a model-only system note while no card is open, removed when a new card shows.
-  - The first version of that fix left the note beside a later receipt, and the model then *denied a real charge*.
-    That case is now a safety check and a unit-tested invariant.
-- **Wrong copy on a second failure.** The second payment-details failure showed lookup copy instead of "nothing
-  was charged".
-- **"Please approve the card" after a real charge.** After reject → "go ahead with that same one" → approve, the
-  customer was charged and then told twice that the extension "isn't finalized". This happened in 1 of 46 charged
-  sessions.
-  - Cause: the receipt reached the model as an *assistant* line, and the prompt says only the system confirms a
-    change. A system note now follows every receipt.
-  - The new safety check that catches it also exposed a blind spot in both money checks: they only matched a
-    straight apostrophe, but the model writes "hasn’t". Rescanning old logs found one more charged customer told
-    "no charge was made".
-- **A hung model call.** After a laptop sleep, all three sim runs sat on dead connections for 15+ minutes. The
-  SDK's default is 10 minutes per request, with retries. Model calls now time out at 60 s × 2 tries and then
-  transfer to a human; a test points the agent at a server that never answers.
+  A prompt rule didn't fix it; a model-only system note while no card is open did.
+- **"Please approve the card" after a real charge.** After decline → "go ahead with that same one" → approve, a
+  charged customer was told the extension "isn't finalized" (1 in 46 charged sessions). The receipt reached the
+  model as an *assistant* line, and the prompt says only the system confirms a change. A system note now follows
+  every receipt. Writing the safety check for it showed that both money checks only matched a straight apostrophe
+  ("hasn't"), while the model writes a curly one ("hasn’t"). Rescanning old logs found one more charged customer
+  told "no charge was made".
+- **Wrong copy on a second payment failure:** lookup copy instead of "nothing was charged".
+- **A hung model call:** see the 60 s timeout above.
 
 ---
 
 ## Assumptions
 
-- **Pilot = US / English / USD.**
-  - `AVIS_PILOT_LOCATIONS` defines the market, and it's **empty by default, which turns the market gate off** so the
-    test accounts work.
-  - Non-English customers are offered a `language_unsupported` handoff in their language.
-- **Thresholds are my assumptions, in one config block (`config.Thresholds`):**
+- **Pilot = US / English / USD.** `AVIS_PILOT_LOCATIONS` defines the market; it's empty by default so the test
+  accounts work. Non-English customers are offered a `language_unsupported` handoff in their language.
+- **Thresholds** live in one config block (`config.Thresholds`) and would be set with Avis:
 
   | Threshold | Value | Source / reason |
   |---|---|---|
-  | Overdue limit | 24 h | `kb_elig_01`; customers who are late but recent *can* still extend, and the quote prices the late fee |
+  | Overdue limit | 24 h | `kb_elig_01`; late-but-recent customers *can* extend, and the quote prices the late fee |
   | Value cap | $500 | `kb_sup_01` |
   | Length cap | 14 added days | `kb_sup_01` |
   | Failed lookups | 5 | Allows for honest typos |
 
-  They'd be set with Avis.
-- **The quote is the only price authority.** `/availability`'s `daily_rate` can differ from the reservation's rate.
-- **A price-only question still goes through the card.** "How much to keep it till Friday?" runs the check and
-  shows the card; the customer just answers `n`. This reuses the one code-rendered price surface rather than letting
-  the model write a number.
-- **Price drift → one re-card, then a human.** Two price changes in a row suggest something unstable.
-- **Partial days.** "A few more hours" may bill as a full day. The quote decides, and the agent says so rather than
-  guessing.
-- **One reservation per chat.** A second one gets a new chat or a handoff.
-- **No real human queue.** Handoffs are written to `logs/handoffs.jsonl`.
+- **The quote is the only price authority.** `/availability`'s `daily_rate` can differ from the reservation's.
+- **A price-only question still goes through the card.** "How much to keep it till Friday?" shows the card, and the
+  customer answers `n`. That reuses the one code-rendered price surface instead of letting the model write a number.
+- **Price drift → one re-card, then a human.** Two changes in a row suggest something unstable.
+- **Partial days:** "a few more hours" may bill as a full day. The quote decides, and the agent says so.
+- **One reservation per chat.** No real human queue: handoffs go to `logs/handoffs.jsonl`.
+- Nothing is hard-coded to the test accounts. Gates read the reservation, quote and clock.
 
 ## What I cut
 
-Cut, in the order I'd cut them, against the ~5 h budget:
+Against the ~5 h budget, in the order I'd cut them:
+1. **Modify / Cancel / Upgrade writes.** See Scope. Each is a handoff with its own reason code.
+2. **A larger model study:** k ≥ 10 to separate `gpt-5-mini` from `gpt-5.5`, and a reasoning-effort sweep.
+3. **A live idempotency test.** Covered by the MockTransport same-key test plus a manual live replay probe.
+4. A real handoff queue, persistence, streaming, a web UI, hybrid (BM25) retrieval.
 
-1. **A larger model comparison.** I ran 3 models × 16 scenarios × k=3 (see Evaluation). The plan said
-   `gpt-5.4-mini`; the comparison is why I ship `gpt-5-mini`. With more time:
-   - k=10 or more, so `gpt-5-mini` and `gpt-5.5` can actually be told apart;
-   - a reasoning-effort sweep per model;
-   - latency measured with one run at a time.
-2. **Live idempotency test.** Covered by the MockTransport same-key test plus a manual live replay probe. It's the
-   next test I'd add.
-3. Walkthrough script and recorded demo transcripts.
-4. Modify / Cancel / Upgrade writes, a real handoff queue, persistence, streaming, a web UI, hybrid (BM25)
-   retrieval.
-
-**Never cut:**
-- the gates;
-- the idempotency key bound to the request body;
-- time zones;
-- handoff;
-- the code-rendered card and receipt;
-- payment details kept out of the model;
-- JSONL logs;
-- this README's assumptions.
+**Never cut:** the gates, the idempotency key bound to the request body, time zones, handoff, the code-rendered card
+and receipt, payment details kept out of the model, the JSONL logs.
 
 ## Known gaps and tech debt (ranked)
 
-1. **The one-write guard is in memory only.** It's per process, so restarting the terminal forgets an earlier
-   write. The idempotency key still protects retries of the same body, but not a fresh session that re-quotes.
-   Production needs a per-reservation write lock in a shared store.
-2. **No billable-count job.** The rule is written and graded in evals, but nothing aggregates
-   `logs/sessions/*.jsonl` into an invoice or containment report yet. The outcome line is written when the
-   session closes (Ctrl-C included), so a hard kill leaves a session with none. Any ledger job must count
-   that as unknown, never as resolved.
-3. **PII in free text.** Card numbers, CVV/ZIP after a keyword, emails and phone numbers are scrubbed. A typed
-   surname or street address still reaches `customer.msg` and the model. The model's handoff note can repeat
-   the surname too (useful to the rep, but it's PII).
-4. **Logs are local files.** There's no rotation or retention policy, and `handoffs.jsonl` is one shared file
-   with no locking. That's fine for one terminal; production would ship events to a log pipeline with access
-   control and post handoffs to a queue.
-5. **Prompt fixes rest on few samples.** Several behaviour fixes were verified on 2–3 live runs. Observed once
-   each, not yet fixed:
+1. **The one-write guard is in memory only.** Restarting the terminal forgets an earlier write. The idempotency key
+   still protects retries of the same body, but not a fresh session that re-quotes. Production needs a
+   per-reservation write lock in a shared store.
+2. **No billable-count job.** The billing rule is defined and graded, but nothing aggregates session logs into an
+   invoice yet. A hard kill leaves a session with no outcome line; a ledger job must count that as unknown, never
+   resolved.
+3. **PII in free text.** Card numbers, CVV/ZIP, emails and phone numbers are scrubbed; a typed surname or address
+   still reaches the model and the log, and the handoff note can repeat the surname.
+4. **Logs are local files** with no rotation or retention, and `handoffs.jsonl` has no locking. Production ships
+   events to a log pipeline with access control and posts handoffs to a queue.
+5. **Some behaviour fixes rest on few samples.** Seen once each, not yet fixed:
    - after "no thanks", the agent sometimes hands off as `customer_requested`;
-   - a handoff note repeated an injected "the manager approved this" claim as if it were fact. The note is for a
-     human, but it should say it's the customer's claim;
-   - "charge the Visa ending 1122" (the card on file) was routed as `payment_change`, because the model never sees
+   - a handoff note repeated an injected "the manager approved this" as fact, rather than as the customer's claim;
+   - "charge the Visa ending 1122" (the card on file) became a `payment_change` handoff, because the model never sees
      the last four;
-   - a sim customer said "2 days from today, so June 29" (wrong; today was Oct 6), and the agent read the date back
-     as given instead of pointing out the contradiction. The overdue gate stopped it, so there was no charge. Weaker
-     models do this more (see `gpt-5.4-mini` above). The likely fix is to put the current return date in the
-     gate's "shortens the rental" message.
-6. **Not verified live:** Ctrl-C mid-write, `out_of_market`, DST-boundary dates. The 409 (reservation changed) and
-   `vehicle_unavailable` paths are covered only by unit tests.
-7. **No conversation compaction, no model/provider failover.** OpenAI errors and timeouts (60 s × 2 tries) hand
-   off to a human.
-8. **Spanish customers sometimes get the closing line in English.** Translated card templates would be the first
-   step of a Spanish expansion.
-9. **KB floor margin is thin** (0.48 vs 0.42, single measurement). Hybrid retrieval if live misses appear.
-10. **The plan's RAG design (one article = one chunk) was replaced** by sentence-level scoring after the retrieval
-   eval measured the misses. It's recorded here for traceability.
+   - the agent read back a customer's self-contradictory date ("2 days from today, so June 29") instead of
+     questioning it. A gate stopped it. The fix is to include the current return date in the gate's message.
+6. **Not verified live:** Ctrl-C mid-write, `out_of_market`, DST-boundary dates. The 409 and `vehicle_unavailable`
+   paths are unit-tested only.
+7. **No conversation compaction, no model/provider failover.**
+8. **Spanish customers sometimes get the closing line in English.**
+9. **The KB floor margin is thin** (0.48 vs 0.42, one measurement). Hybrid retrieval if live misses appear.
 
-## With more time
+## Production version
 
-- **Run the money checks live, not just in evals.** The safety checks in `evals/sim.py` run on a finished log, so
-  they catch a bad message after the customer has read it. In production they'd check each reply *before* it
-  prints. If a reply breaks a rule, code discards it and asks the model once more with a correcting note; if
-  that also fails, code prints a fixed line instead. The rules are: after a charge, no "approve the card" and no
-  "nothing was charged"; no confirmation number that didn't come from the API; no "it's done" without a charge.
-  Today's "please approve the card" bug would have been blocked before the customer saw it. Word rules can
-  false-positive, so they'd be tuned against the sim logs first.
-- **Operate it:**
-  - aggregate the outcome ledger into containment, billable resolutions, protective-handoff rate and repeat-contact
-    rate;
-  - alarm on retry rate, `outcome_unknown` and gate-rate drift;
-  - a weekly human review of a sample of resolutions plus *every* `outcome_unknown` / mismatch.
-- **Continuous evals:**
-  - sample live traces into the scenario suite;
-  - re-run pass^k on every prompt, model or KB change;
-  - run the LLM judge over production transcripts as a triage filter;
-  - check the KB for conflicts before KB changes ship.
-- **Day-1 metric:** billable resolutions per extend-intent conversation, read **alongside** the
-  protective-handoff rate. A rising resolution rate with a falling protective rate means the gates are leaking.
+- **Run the money checks live, not just in evals.** The safety checks above run on a finished log, so they catch a
+  bad message after the customer has read it. In production they'd check each reply *before* it prints: on a
+  violation, discard it, ask the model once more with a correcting note, then fall back to a fixed line. The
+  "please approve the card" bug would have been blocked before the customer saw it. Word rules can false-positive,
+  so they'd be tuned against the sim logs first.
+- **Operate it:** aggregate the outcome ledger into containment, billable resolutions, protective-handoff rate and
+  repeat-contact rate; alarm on retry rate, `outcome_unknown` and gate-rate drift; review a weekly sample of
+  resolutions plus *every* `outcome_unknown` and mismatch.
+- **Day-1 metric:** billable resolutions per extend-intent conversation, read **alongside** the protective-handoff
+  rate. A rising resolution rate with a falling protective rate means the gates are leaking.
+- **Continuous evals:** sample live traces into the scenario suite; re-run pass^k on every prompt, model or KB
+  change; run the judge over production transcripts as a triage filter; check the KB for conflicts before it ships.
 
-### How I'd add Cancel
-
-1. **AOP.** Write the procedure: trigger, identity, the 48 h rule, refund vs. penalty, and what's said when.
-2. **Probe.** Since `/quote` lies for cancels, compute the penalty from the reservation and the KB rule in code. Or
-   ask Avis for a cancel quote endpoint and hand off until it exists.
-3. **Gates.** Add the new gates to `policy.py` with reason codes: no cancel after pickup, high-refund cap.
-4. **Card and commit.** Reuse the card → `y` → terminal-commit path (`extend.py` → a sibling `cancel.py`). Same
-   one-write guard, same receipt-from-response.
-5. **Evals.** Add scenarios: happy path, inside 48 h, already picked up, a refund-dispute adversary. Add a fault:
-   the cancel times out → `outcome_unknown`. Gate on pass^3 and 100% safety before enabling it in the pilot config.
+**Adding Cancel** reuses the same shape:
+1. Write the procedure (48 h rule, refund vs. penalty, what's said when).
+2. `/quote` misprices cancels, so compute the penalty in code from the reservation and the KB rule, or hand off until
+   Avis provides a cancel quote.
+3. Add gates with reason codes: no cancel after pickup, a high-refund cap.
+4. Reuse card → `y` → terminal commit, with the same one-write guard and receipt-from-response.
+5. Add sims for the happy path, inside 48 h, already picked up, a refund-dispute adversary, and a cancel timeout. Gate
+   on pass^3 and 100% safety before enabling it.
 
 ---
 
@@ -538,15 +427,14 @@ Cut, in the order I'd cut them, against the ~5 h budget:
 | Handoff packets | `logs/handoffs.jsonl` | No |
 | Sim session logs | `logs/sims/<stamp>/<scenario>-r<n>.jsonl` | No |
 | Sim result tables | `evals/results/sim-<stamp>-k<k>.md` | Yes |
-| Sample session | `docs/sample-logs/` | Yes |
+| Sample session | `docs/sample-logs/priya-latefee-then-extend.jsonl` | Yes |
 
-Session logs use **allowlisted fields only**; anything not on the list is dropped:
+Session logs keep **allowlisted fields only**:
 
 | Event | Fields |
 |---|---|
 | `session.start` | git sha, model, prompt hash, KB hash |
-| `customer.msg` | scrubbed text |
-| `agent.msg` | text |
+| `customer.msg` / `agent.msg` | scrubbed text / text |
 | `llm.turn` | latency, tokens |
 | `tool.call` / `tool.result` | reservation fields reduced to an allowlist: no name, address, plate or card |
 | `api.request` | method, path, status, error code, latency, attempt, idempotency key |
@@ -554,27 +442,27 @@ Session logs use **allowlisted fields only**; anything not on the list is droppe
 | `approval` | total shown, decision |
 | `outcome` | the ordered outcome list |
 
-A failed log write warns on stderr and never ends the chat. **OpenAI tracing is disabled**: the JSONL is the
-source of truth, and a third-party copy of transcripts adds retention exposure for no debugging gain.
-
-To debug a conversation, start from the handoff packet's log path. Then `grep idempotency_key` or `gate.decision`
-in that session file.
+**To debug a conversation,** start from the handoff packet's log path, then `grep idempotency_key` or
+`gate.decision` in that session file. A failed log write warns on stderr and never ends the chat. OpenAI tracing is
+disabled: the JSONL is the source of truth, and a third-party copy of transcripts adds retention exposure for no
+debugging gain.
 
 ## Repo map
 
 ```
 src/avis_agent/
   cli.py        terminal loop; card, y/n, payment prompts, charge, receipt
-  agent.py      system prompt + the 4 tools wired to the SDK
+  agent.py      system prompt, the 4 tools, model client (timeouts)
   tools.py      lookup (last-name check, lookup cap), search_kb, check_extension, handoff
   extend.py     evaluate (gate order) → render_card → commit → render_receipt
   policy.py     reservation + value gates        config.py   thresholds, env
   client.py     Avis API client, retries, idempotency, OutcomeUnknown
   kb.py         sentence-level retrieval + authority ordering
-  handoff.py    handoff packets → logs/handoffs.jsonl      reasons.py  reason codes + customer copy
-  trace.py      allowlisted JSONL session log + outcomes   privacy.py  scrubber
+  handoff.py    handoff packets                  reasons.py  reason codes + customer copy
+  trace.py      allowlisted JSONL log + outcomes privacy.py  scrubber
   timeutil.py   IATA → time zone, local ↔ UTC
-docs/aop-extend.md   the operating procedure the prompt mirrors (reason-code table, billing rule, "never" list)
-evals/               sim.py, scenarios.yaml, faults.py, judge.py, retrieval.py, queries.yaml, results/
+docs/aop-extend.md   the operating procedure the prompt mirrors (reason codes, billing rule, "never" list)
+docs/sample-logs/    one real session log
+evals/               sim.py, scenarios.yaml, faults.py, judge.py, retrieval.py, compare.py, results/
 tests/               offline unit tests
 ```
