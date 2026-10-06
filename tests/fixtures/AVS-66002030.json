@@ -1,0 +1,40 @@
+{
+  "reservation_id": "AVS-66002030",
+  "customer_id": "CUST-561234",
+  "customer_name": "David Kim",
+  "membership_status": "standard",
+  "vehicle": {
+    "type": "midsize_sedan",
+    "description": "Toyota Camry or similar",
+    "make_model": "2024 Toyota Camry",
+    "color": "White",
+    "license_plate": "6MID220"
+  },
+  "pickup_location": {
+    "code": "LAX",
+    "name": "Los Angeles International Airport",
+    "address": "9217 Airport Blvd, Los Angeles, CA 90045"
+  },
+  "return_location": {
+    "code": "LAX",
+    "name": "Los Angeles International Airport",
+    "address": "9217 Airport Blvd, Los Angeles, CA 90045"
+  },
+  "dates": {
+    "pickup_datetime": "2027-06-11T13:00:00-07:00",
+    "current_return_datetime": "2027-06-14T12:00:00-07:00",
+    "original_return_datetime": "2027-06-14T12:00:00-07:00"
+  },
+  "pricing": {
+    "daily_rate": 45.99,
+    "currency": "USD"
+  },
+  "payment": {
+    "card_on_file": {
+      "type": "Visa",
+      "last_four": "1122"
+    },
+    "total_charged": 137.97
+  },
+  "status": "active"
+}

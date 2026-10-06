@@ -1,0 +1,40 @@
+{
+  "reservation_id": "AVS-50000001",
+  "customer_id": "CUST-500001",
+  "customer_name": "Robert Chen",
+  "membership_status": "standard",
+  "vehicle": {
+    "type": "fullsize_sedan",
+    "description": "Chevrolet Impala or similar",
+    "make_model": "2024 Chevrolet Impala",
+    "color": "Red",
+    "license_plate": "5FUL300"
+  },
+  "pickup_location": {
+    "code": "DFW",
+    "name": "Dallas/Fort Worth International Airport",
+    "address": "2400 Aviation Dr, DFW Airport, TX 75261"
+  },
+  "return_location": {
+    "code": "DFW",
+    "name": "Dallas/Fort Worth International Airport",
+    "address": "2400 Aviation Dr, DFW Airport, TX 75261"
+  },
+  "dates": {
+    "pickup_datetime": "2027-06-12T15:00:00-05:00",
+    "current_return_datetime": "2027-06-16T11:00:00-05:00",
+    "original_return_datetime": "2027-06-16T11:00:00-05:00"
+  },
+  "pricing": {
+    "daily_rate": 52.99,
+    "currency": "USD"
+  },
+  "payment": {
+    "card_on_file": {
+      "type": "Visa",
+      "last_four": "3471"
+    },
+    "total_charged": 211.96
+  },
+  "status": "active"
+}

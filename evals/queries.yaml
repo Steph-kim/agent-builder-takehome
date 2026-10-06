@@ -1,0 +1,72 @@
+# Retrieval gold set. Each query is a trap from the KB's conflicts or a phrasing a customer would use.
+#   gold:     articles that must appear in the top-k (recall@k is measured over these)
+#   outrank:  [official, legacy] pairs — if the legacy article is shown, the official one must be shown
+#             above it (authority precedence; must be 100%)
+#   empty:    off-topic query — nothing may clear the similarity floor
+
+- q: What's the grace period if I return the car late?
+  gold: [kb_ext_01]
+  outrank: [[kb_ext_01, kb_fee_01]]
+
+- q: Is the grace period still 2 hours?
+  gold: [kb_ext_01]
+  outrank: [[kb_ext_01, kb_fee_01]]
+
+- q: I'm going to be about 90 minutes late dropping off — will I get charged?
+  gold: [kb_ext_01, kb_fee_02]
+  outrank: [[kb_ext_01, kb_fee_01]]
+
+- q: How much is the late return fee?
+  gold: [kb_fee_02]
+  outrank: [[kb_fee_02, kb_fee_01]]
+
+- q: I'm a Preferred member, do I get a longer grace period?
+  gold: [kb_pref_04]
+  outrank: [[kb_ext_01, kb_fee_01]]
+
+- q: Do Preferred members pay late fees?
+  gold: [kb_pref_02]
+  outrank: [[kb_pref_02, kb_fee_01]]
+
+- q: Does my Preferred late-fee waiver cover the after-hours return fee?
+  gold: [kb_sup_02, kb_pref_02]
+
+- q: What happens if I return the car after the location has closed?
+  gold: [kb_sup_02]
+
+- q: How much does it cost to drop the car off at a different location?
+  gold: [kb_fee_03]
+
+- q: Is there a fee if I cancel the day before pickup?
+  gold: [kb_can_01]
+
+- q: I only need three more hours, how will I be billed?
+  gold: [kb_ext_03]
+
+- q: Is it cheaper to extend or just bring the car back late?
+  gold: [kb_ext_05]
+
+- q: What do you charge if I bring it back with less gas?
+  gold: [kb_fee_05]
+
+- q: Can I pay for the extension with a different card?
+  gold: [kb_elig_03]
+
+- q: How long does a refund take to show up after cancelling?
+  gold: [kb_can_02]
+
+- q: What's the weather going to be like in Chicago tomorrow?
+  empty: true
+
+- q: Can you recommend a good restaurant near the airport?
+  empty: true
+
+# Near-domain but not covered by the KB: the agent should say so (or offer kb_gap), not stretch an article.
+- q: Can I bring my dog in the rental car?
+  empty: true
+
+- q: Do you rent child car seats?
+  empty: true
+
+- q: What's the phone number for the LAX branch?
+  empty: true

@@ -1,0 +1,40 @@
+{
+  "reservation_id": "AVS-48372915",
+  "customer_id": "CUST-483729",
+  "customer_name": "Marcus Lee",
+  "membership_status": "standard",
+  "vehicle": {
+    "type": "compact",
+    "description": "Toyota Corolla or similar",
+    "make_model": "2024 Toyota Corolla",
+    "color": "Blue",
+    "license_plate": "ILX4471"
+  },
+  "pickup_location": {
+    "code": "ORD",
+    "name": "O'Hare International Airport",
+    "address": "10000 W Balmoral Ave, Chicago, IL 60666"
+  },
+  "return_location": {
+    "code": "ORD",
+    "name": "O'Hare International Airport",
+    "address": "10000 W Balmoral Ave, Chicago, IL 60666"
+  },
+  "dates": {
+    "pickup_datetime": "2026-06-23T09:00:00-05:00",
+    "current_return_datetime": "2026-06-26T10:00:00-05:00",
+    "original_return_datetime": "2026-06-26T10:00:00-05:00"
+  },
+  "pricing": {
+    "daily_rate": 38.99,
+    "currency": "USD"
+  },
+  "payment": {
+    "card_on_file": {
+      "type": "Visa",
+      "last_four": "6754"
+    },
+    "total_charged": 116.97
+  },
+  "status": "active"
+}
