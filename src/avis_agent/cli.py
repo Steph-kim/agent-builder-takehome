@@ -28,6 +28,7 @@ from .extend import NOTHING_CHANGED, Payment, commit, receipt_note, render_card
 from .handoff import customer_summary
 from .kb import KnowledgeBase, kb_hash, openai_embedder
 from .privacy import scrub
+from .style import banner, enabled, terminal_io, width
 from .tools import AgentContext
 from .trace import Tracer
 
@@ -209,7 +210,11 @@ def _short_hash(text: str) -> str:
 async def _run(settings: Settings) -> None:
     embed = openai_embedder(AsyncOpenAI(api_key=settings.openai_api_key), settings.embed_model)
     kb = await KnowledgeBase.build(embed)
-    await chat(settings, kb)
+    if enabled():
+        write, read, wrap_secret = terminal_io()
+        await chat(settings, kb, read=read, write=write, read_secret=wrap_secret(getpass.getpass))
+    else:
+        await chat(settings, kb)
 
 
 def main() -> int:
@@ -218,7 +223,7 @@ def main() -> int:
     except ConfigError as e:
         print(e, file=sys.stderr)
         return 2
-    print("Avis support (type 'exit' or Ctrl-D to leave)\n")
+    print(banner(width()) if enabled() else "Avis support (type 'exit' or Ctrl-D to leave)\n")
     try:
         asyncio.run(_run(settings))
     except openai.APIError as e:  # KB embedding at startup; mid-chat failures are handled in respond()

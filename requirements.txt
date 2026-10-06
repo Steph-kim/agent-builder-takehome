@@ -12,3 +12,6 @@ PyYAML==6.0.3
 # Dev
 pytest==9.1.1
 ruff==0.16.10
+
+# This package (src/avis_agent), so `python -m avis_agent` works from the repo root
+-e .
