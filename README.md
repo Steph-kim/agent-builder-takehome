@@ -103,54 +103,60 @@ Avis can audit.
 
 ## Customer experience
 
-A real terminal session, captured from a live run (`gpt-5-mini`; the customer is the simulated one from the evals).
-Long lines are wrapped and the wording is unedited, warts included: "exempt from the late-fee benefit" should read
-"exempt from the late fee", and the agent mentions the card a moment before code prints it. Hidden prompts show
-nothing as you type, as in a real terminal. The session log is in [`docs/sample-logs/`](docs/sample-logs/).
+A real terminal session, captured from a live run of the current code (`gpt-5-mini`; the customer is the simulated
+one from the evals), shown as the terminal draws it. The wording is unedited, warts included: the agent mentions the
+card a moment before code prints it. Hidden prompts show nothing as you type. The session log is in
+[`docs/sample-logs/`](docs/sample-logs/).
+
+<p align="center"><img src="docs/img/cli-session.svg" alt="A terminal session: a late-fee question answered from the policy articles, then an extension to tomorrow at 6pm, a boxed confirmation card approved with y, hidden payment prompts, a green receipt box, and a closing 'anything else?' line" width="860"></p>
+
+<details>
+<summary>The same session as plain text</summary>
 
 ```text
 Agent: How can I help?
-You:   hi, will i get charged a late fee if i return my car late?
-Agent: Short answer: possibly.
+You:   hi! will i get charged a late fee if i return my car late?
+Agent: If you return after your scheduled time and past the grace period, a late return fee can apply.
 
-       - Avis provides a short grace period after your scheduled return before late charges start — 30 minutes
-         is the current policy.
-       - If you're past the grace period, standard customers may be charged a late return fee (plus any daily
-         charges that accrue); Avis Preferred members are exempt from the late-fee benefit.
-       - Extending the rental before your return time is usually cheaper than returning late.
-       - Returning when the location is closed can also trigger a separate after-hours fee.
-You:   ok thanks. can i extend my rental until tomorrow at 6pm instead?
-Agent: I can help — please send your reservation number (e.g., AVS-12345678) and the last name on the booking so
-       I can look it up.
-You:   sure! it's AVS-77001020 and the last name is patel.
-Agent: I found your reservation AVS-77001020. You'd like to extend the return to Tuesday, October 6, 2026 at
-       6:00 PM local (Tuesday, Oct 6 at 6:00 PM) — is that correct? If so I'll check availability and pricing.
-You:   yep, that's right!
+       - Avis provides a 30‑minute grace period after the scheduled return time; after that late charges begin.
+       - A $29 late return fee is charged to standard members in addition to any daily charges for the extra time;
+         Avis Preferred members are exempt from the late return fee.
+       - If you know you’ll be late, extending the rental before your return time is usually cheaper — request an
+         extension with your reservation number and the new local return date/time.
+You:   ok can i extend my rental to tomorrow at 6pm? my res number is AVS-77001020.
+Agent: I can help with that. What’s the last name on the reservation?
+You:   patel
+Agent: I found your reservation AVS-77001020 at SFO. You want to extend the return to Tuesday, October 6, 2026 at
+       6:00 PM local time — is that right?
+You:   yep, that’s right!
 (Checking availability…)
-Agent: A confirmation card with the price is now showing — please review and approve it there to complete the
-       extension.
-──── Confirm your extension ────
-Reservation    AVS-77001020
-Return now     Monday, October 5, 2026 at 9:24 PM PDT
-New return     Tuesday, October 6, 2026 at 6:00 PM PDT
-Extra days     1 × $54.99 = $54.99
-Taxes & fees   $5.09
-Total          $60.08 USD
-Charged to     Mastercard ending 2941
+Agent: A confirmation card with the price is showing now — please review and approve it there.
+╭─ Confirm your extension ───────────────────────────────╮
+│ Reservation    AVS-77001020                            │
+│ Return now     Monday, October 5, 2026 at 11:07 PM PDT │
+│ New return     Tuesday, October 6, 2026 at 6:00 PM PDT │
+│ Extra days     1 × $54.99 = $54.99                     │
+│ Taxes & fees   $5.09                                   │
+│ Total          $60.08 USD                              │
+│ Charged to     Mastercard ending 2941                  │
+╰────────────────────────────────────────────────────────╯
 Approve this charge? (y/n): y
-Agent: To confirm, enter the email on the booking, then the card's security code and billing ZIP. They go
-       straight to Avis — the assistant never sees them.
+Agent: To confirm, enter the email on the booking, then the card's security code and billing ZIP. They go straight
+       to Avis — the assistant never sees them.
 Email on the booking: priya.patel@example.com
 Card security code (hidden):
 Billing ZIP (hidden):
-──── Extension confirmed ────
-Confirmation   EXT-770010-813
-New return     Tuesday, October 6, 2026 at 6:00 PM PDT
-Charged        $60.08 USD to the card on file
-You:   awesome, thanks!
-Agent: You're all set — the extension is confirmed (EXT-770010-813) for Tuesday, Oct 6, 2026 at 6:00 PM PDT.
-       Anything else I can do for you?
+╭─ Extension confirmed ──────────────────────────────────╮
+│ Confirmation   EXT-770010-461                          │
+│ New return     Tuesday, October 6, 2026 at 6:00 PM PDT │
+│ Charged        $60.08 USD to the card on file          │
+╰────────────────────────────────────────────────────────╯
+Agent: You're all set — your extension is confirmed. Is there anything else I can help you with?
+You:   nope, thanks!
+Agent: You're welcome — have a great trip!
 ```
+
+</details>
 
 What to notice:
 - **The card, the payment prompts and the receipt are printed by code, not the model.** Every number on the card
@@ -159,8 +165,12 @@ What to notice:
 - **Time zones:** "tomorrow at 6pm" was resolved at the return location (SFO, Pacific time), not the server's zone,
   and read back with the weekday before anything was checked.
 - **Identity was asked for only when it was needed.** The policy question needed none.
-- **The policy answer is grounded.** The model cites the articles it used (`[kb_ext_01]` …). Those ids are logged
-  for audit (`cites` on `agent.msg`) and stripped from what the customer sees.
+- **The policy answer is grounded.** The 30-minute grace period and $29 fee come from the official articles, not
+  the legacy "2 hours". The model cites the articles it used (`[kb_ext_01]` …); those ids are logged for audit
+  (`cites` on `agent.msg`) and stripped from what the customer sees.
+- **The close is code too.** "You're all set… anything else?" follows the receipt, so the customer is never left
+  at a bare prompt, and it carries no price or date of its own.
+- **Colours and boxes are terminal-only** (`style.py`). Piped output, tests and sims get the plain text above.
 
 **Where I draw the line.** The agent never:
 - charges without a code-rendered card the customer approved with `y`;
